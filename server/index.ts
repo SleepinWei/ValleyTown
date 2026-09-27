@@ -1,0 +1,11 @@
+import 'dotenv/config';
+import { resolve } from 'node:path';
+import { SimulationWorker } from './worker-client';
+import { createApp } from './app';
+const world=new SimulationWorker({dir:resolve(process.env.DATA_DIR||'data'),mode:process.env.MODEL_MODE==='demo'?'demo':'live',limit:Number(process.env.TOKEN_LIMIT)||5_000_000});
+await world.ready;
+const app=await createApp(world);
+await app.listen({host:'127.0.0.1',port:Number(process.env.PORT)||3001});
+console.log(`ValleyTown ready at http://127.0.0.1:${process.env.PORT||3001} · simulation worker ${world.snapshot().runtime?.threadId} · ${world.snapshot().status}`);
+let closing=false;
+for(const signal of ['SIGINT','SIGTERM']as const)process.on(signal,async()=>{if(closing)return;closing=true;await app.close();process.exit(0);});
