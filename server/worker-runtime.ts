@@ -3,18 +3,20 @@ import { Store } from './store';
 import { World } from './world';
 import { createApp } from './app';
 const port=parentPort!;
-const store=new Store(workerData.dir,workerData.limit);
+const store=new Store(workerData.dir,workerData.limits);
 const world=new World(store,workerData.mode);
 // Internal routing shares production validation and command idempotency, without opening a socket.
 const app=await createApp(world,{internal:true});await app.ready();
 function publish(){port.postMessage({type:'snapshot',value:{player:{...world.snapshot(false),runtime:{simulation:'worker',threadId}},observer:{...world.snapshot(true),runtime:{simulation:'worker',threadId}}}});}
-world.onChange=publish;
+// Coalesce bursts of completed jobs; commands still publish their result immediately.
+let scheduled:ReturnType<typeof setTimeout>|undefined;
+world.onChange=()=>{if(!scheduled)scheduled=setTimeout(()=>{scheduled=undefined;publish();},100);};
 const stream=setInterval(publish,500);publish();
 let closing=false;
 port.on('message',async message=>{
  try{
   if(message.type==='close'){
-   closing=true;clearInterval(stream);const previousStatus=world.state.status;world.pause();
+   closing=true;clearInterval(stream);if(scheduled)clearTimeout(scheduled);world.onChange=()=>{};const previousStatus=world.state.status;world.pause();
    // Let already-sent model calls settle against the single ledger owner before closing SQLite.
    while(world.active)await new Promise(resolve=>setTimeout(resolve,50));
    // Preserve the run flag; restart continues from the saved game clock.

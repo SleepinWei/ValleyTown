@@ -1,3 +1,4 @@
+import { budgetLimitsFromEnv } from '../server/pricing';
 import 'dotenv/config';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,9 +8,9 @@ import { Store } from '../server/store';
 import { World } from '../server/world';
 import { ModelGateway } from '../server/models';
 // Stop the server or pause it with all requests settled before using this script.
-const ledger=new Store(resolve(process.env.DATA_DIR||'data'),Number(process.env.TOKEN_LIMIT)||5e6);
+const ledger=new Store(resolve(process.env.DATA_DIR||'data'),budgetLimitsFromEnv());
 const dir=mkdtempSync(join(tmpdir(),'valleytown-agent-'));const store=new Store(dir);const world=new World(store,'live');
-world.gateway=new ModelGateway(ledger,()=>world.state.status==='running_live',()=>world.pause('paused_token_limit'));
+world.gateway=new ModelGateway(ledger,()=>world.state.status==='running_live',()=>world.pause('paused_budget_limit'));
 const before=ledger.usage().used;const report:Record<string,unknown>={at:new Date().toISOString(),scope:'一个角色的一次宏观规划、行动判断、三步对话与反思；临时世界，实际消耗写入主账本'};
 try{
  world.resume();const a=world.actor('gardener');

@@ -1,3 +1,4 @@
+import { StoryService } from './stories';
 import { SimulationRate } from './simulation-rate';
 import { actionRegistry, buildActions, validateAction, beginLocalAction, advanceLocalActions, professionFor } from './actions';
 import { planning, planIssue, replanEligibility, requestPlan, failPlan, failedAction, planningPolicy } from './planning';
@@ -33,9 +34,34 @@ const friendlyError=(error:unknown)=>error instanceof Error?error.message.slice(
 type Candidate=ActionCandidate;
 export class World {
   readonly simulationRate=new SimulationRate();
-  state:WorldState; gateway:ModelGateway; documents:Documents; lab:DecisionLab; private readyAt=new Map<string,number>();
+  stories:StoryService; state:WorldState; gateway:ModelGateway; documents:Documents; lab:DecisionLab; private readyAt=new Map<string,number>();
   lanes={action:0,dialogue:0,background:0}; private backgroundActors=new Set<string>(); private backgroundRetry=new Map<string,number>(); private fastReady=new Map<string,number>(); private elapsed=0;
-  get active(){return this.lanes.action+this.lanes.dialogue+this.lanes.background+(this.lab?.active?1:0);}
+  get active(){return this.lanes.action+this.lanes.dialogue+this.lanes.background+(this.lab?.active?1:0)+(this.stories?.active?1:0);}
+  private syncing=false;
+  private get pendingSimulation(){return this.lanes.action+this.lanes.dialogue+this.lanes.background;}
+  // Stop just before a critical transition, then drain the current jobs without
+  // dispatching replacements. Narrative/story requests do not decide world state.
+  private nextSyncPoint(){
+    const now=this.state.clock,points=[(weatherSlot(now)+1)*240]; // includes midnight
+    for(const p of this.state.appointments)if(p.status==='accepted'){
+      if(this.state.weather==='雷雨')points.push(p.at-30);
+      if(p.at>=now)points.push(p.at);
+      points.push(p.at+60);
+      if(p.togetherSince!==undefined)points.push(p.togetherSince+15);
+    }
+    for(const c of this.state.conversations)if(c.status==='active'&&c.pending&&!c.participants.includes('player'))points.push(c.expires);
+    for(const a of this.state.actors)if(a.busy||this.backgroundActors.has(a.id)){
+      if(a.localTask)points.push(a.localTask.endsAt);
+      if(a.outdoor.task?.phase==='active'&&a.outdoor.task.endsAt!==null)points.push(a.outdoor.task.endsAt);
+      if(a.activity==='工作中')points.push(a.actionUntil);
+    }
+    for(const b of this.state.society.births)points.push(b.dueAt);
+    for(const c of this.state.society.cases){
+      if(c.status==='investigating'||c.status==='unresolved')points.push(c.nextInvestigation);
+      if(c.status==='sentenced'&&c.releaseAt!==null)points.push(c.releaseAt);
+    }
+    return Math.min(...points);
+  }
   private lastFastContextTokens=0; private playerTalkIdle=new Map<string,number>(); lastSave=Date.now(); lastDocs=Date.now();
   onChange=()=>{}; private decisionCursor=0;
   constructor(public store:Store, mode:Mode='demo',gateway?:ModelGateway){
@@ -45,8 +71,10 @@ export class World {
       for(const c of this.state.conversations){c.pending=false;if(c.participants.includes('player'))this.endConversation(c.id);}
     }
     for(const a of this.state.actors){const p=planning(a,this.state.clock);if(p.request&&!this.state.pending.some(r=>r.kind==='plan'&&r.data.requestId===p.request?.id)&&(p.inFlight||p.request.attempts>=planningPolicy.maxAttempts))failPlan(a,this.state.clock,p.request.id,'上次规划请求中断');p.inFlight=null;a.localTask??=null;}
-    this.gateway=gateway??new ModelGateway(store,()=>isRunning(this.state),()=>this.pause('paused_token_limit'));
+    this.gateway=gateway??new ModelGateway(store,()=>isRunning(this.state),()=>this.pause('paused_budget_limit'));
     this.lab=new DecisionLab(this);
+    for(const a of this.state.actors)a.storyHistoryStart??=existing?this.state.clock:(a.life.bornAt??480);
+    this.stories=new StoryService(this);
     const pendingIds=new Set(this.state.pending.filter(p=>p.kind==='action').map(p=>p.data.trace?.id));
     for(const trace of this.store.traces(1000))if(['requesting','deferred'].includes(trace.status)&&!pendingIds.has(trace.id)){trace.status='interrupted';trace.reason='进程中断；无法确认最终执行结果';this.store.putTrace(trace);}
     this.documents=new Documents(store,()=>this.state,(a,kind,body)=>{
@@ -64,17 +92,17 @@ export class World {
   name(id:string){return id==='player'?'你':this.state.actors.find(a=>a.id===id)?.name??id;}
   person(id:string){return id==='player'?this.state.player:this.actor(id);}
   privateContext(a:Actor){return {identity:{name:a.name,role:a.role,persona:a.persona,goal:a.goal},clock:{day:dayOf(this.state.clock),time:timeOf(this.state.clock)},plan:a.plan,family:{...a.life,aggressive:undefined},environment:environmentContext(this.state.weather,this.state.clock),region:regionAt(a.x,a.y).name,outdoor:{interests:outdoorInterests[a.id]??['jogging','fishing'],skills:a.outdoor.xp,inventory:a.inventory,places:locations.filter(l=>['pier','camp','sports','court','summit','trail'].includes(l.kind)).map(l=>({id:l.id,name:l.name}))},needs:{energy:a.energy,mood:a.mood},ownSecret:a.secret,longTermNotes:a.longTermNotes??'',dailyNotes:a.dailyNotes?.day===dayOf(this.state.clock)?a.dailyNotes.text:'',longTermMemories:a.memories.filter(m=>m.important&&m.kind!=='editor').slice(-10),memories:a.memories.filter(m=>m.kind!=='editor'&&m.day===dayOf(this.state.clock)).slice(-18),ownRelations:a.relations,knownFacts:a.knowledge};}
-  pause(status:'paused_manual'|'paused_token_limit'='paused_manual'){
+  pause(status:'paused_manual'|'paused_budget_limit'='paused_manual'){
     this.readyAt.clear();this.lab?.stop();this.simulationRate.reset();
-    this.state.status=status;this.state.notice=status==='paused_token_limit'?'token 额度不足，整个模拟已暂停。提高上限后可以继续。':'时间与行动已暂停。在途请求仍会结算，结果暂存。';this.persist();this.onChange();
+    this.state.status=status;this.state.notice=status==='paused_budget_limit'?'模型金额池额度不足，整个模拟已暂停。提高对应池子的人民币上限后可以继续。':'时间与行动已暂停。在途请求仍会结算，结果暂存。';this.persist();this.onChange();
   }
-  resume(){if(this.lab?.active)throw new Error('实验请求仍在结算，请稍后继续');const usage=this.store.usage();if(usage.used+usage.reserved>=usage.limit)throw new BudgetError();this.simulationRate.reset();this.state.status='running_live';this.state.notice=this.state.mode==='demo'?'规则演示运行中 · 不调用模型，不冒充 Jev 决策。':'Jev 正在感知小镇，居民开始自己的生活。';this.persist();}
+  resume(){if(this.lab?.active)throw new Error('实验请求仍在结算，请稍后继续');const exhausted=this.store.exhaustedProvider();if(this.state.mode==='live'&&exhausted)throw new BudgetError(exhausted);this.simulationRate.reset();this.state.status='running_live';this.state.notice=this.state.mode==='demo'?'规则演示运行中 · 不调用模型，不冒充 Jev 决策。':'Jev 正在感知小镇，居民开始自己的生活。';this.persist();}
   // Fixed game-time durations; target speed changes never change the world's rules.
   private gameDelay(seconds:number){return seconds*.8;}
   setDayMinutes(value:number){this.state.dayMinutes=value;this.simulationRate.reset();}
   requireRunning(){if(this.lab?.active)throw new Error('决策实验期间世界冻结，请先停止实验');if(!isRunning(this.state))throw new Error('模拟已暂停，请先继续');}
   persist(){this.state.checkpointAt=Date.now();this.store.save(this.state);}
-  event(kind:string,text:string,actorIds:string[]=[],audience:string[]=['public'],source?:string){const e={id:randomUUID(),at:this.state.clock,kind,text,actorIds,audience,mode:'live' as const,source};this.state.events.push(e);this.state.events=this.state.events.slice(-500);if(['marriage','birth','murder','justice','family'].includes(kind))for(const id of actorIds){const a=this.state.actors.find(a=>a.id===id);if(a){planIssue(a,this.state.clock,'major-event',text);a.decisionReason='与本人有关的重要事件';a.nextDecision=this.state.clock;}}return e;}
+  event(kind:string,text:string,actorIds:string[]=[],audience:string[]=['public'],source?:string){const e={id:randomUUID(),at:this.state.clock,kind,text,actorIds,audience,mode:'live' as const,source};this.store.recordEvent(e);for(const id of actorIds){const a=this.state.actors.find(a=>a.id===id);if(a){(a.storyEventIds??=[]).push(e.id);a.storyHistoryStart??=this.state.clock;}}this.state.events.push(e);this.state.events=this.state.events.slice(-500);if(['marriage','birth','murder','justice','family'].includes(kind))for(const id of actorIds){const a=this.state.actors.find(a=>a.id===id);if(a){planIssue(a,this.state.clock,'major-event',text);a.decisionReason='与本人有关的重要事件';a.nextDecision=this.state.clock;}}return e;}
   memory(a:Actor,text:string,source:string,important=false,kind:'experience'|'belief'|'commitment'|'reflection'|'editor'='experience'){
     a.memories.push({id:randomUUID(),day:dayOf(this.state.clock),minute:this.state.clock,text,source,kind,important});
   }
@@ -143,14 +171,21 @@ export class World {
     if(this.lab?.active){this.simulationRate.record(seconds,0);return;}
     if(!isRunning(this.state)){if(Date.now()-this.lastDocs>30000){this.documents.scan();this.lastDocs=Date.now();}return;}
     this.elapsed+=seconds;
-    const usage=this.store.usage();if(usage.used+usage.reserved>=usage.limit){this.pause('paused_token_limit');return;}
+    if(this.state.mode==='live'&&this.store.exhaustedProvider()){this.pause('paused_budget_limit');return;}
     while(this.state.pending.length&&isRunning(this.state))this.applyPending(this.state.pending.shift()!);
     if(!isRunning(this.state))return;
     for(const reply of this.state.speechQueue.splice(0))this.commitSpeech(reply);
-    // An unfinished API job is a hard barrier. No elapsed-time debt is accumulated.
-    // Discard suspension/long event-loop gaps rather than fast-forwarding on return.
-    const delta=this.active>0||seconds>1?0:Math.max(0,seconds)*1440/(this.state.dayMinutes*60);
+    // Known actions proceed while APIs run. Critical boundaries drain pending jobs.
+    // Neither API waits nor suspension gaps accumulate elapsed-time debt.
+    if(!this.pendingSimulation)this.syncing=false;
+    let delta=seconds>1?0:Math.max(0,seconds)*1440/(this.state.dayMinutes*60);
+    if(this.syncing)delta=0;
+    else if(this.pendingSimulation){
+      const available=Math.max(0,this.nextSyncPoint()-this.state.clock-1e-6);
+      if(delta>=available){delta=available;this.syncing=true;}
+    }
     this.simulationRate.record(seconds,delta);
+    if(this.syncing&&delta===0){this.maintain();return;}
     const oldDay=dayOf(this.state.clock);this.state.clock+=delta;
     if(dayOf(this.state.clock)>oldDay){for(const a of this.state.actors.filter(freeAdult)){this.state.reflectionQueue.push({actorId:a.id,day:oldDay});a.giftCounts={};}this.event('town',`第 ${dayOf(this.state.clock)} 天开始了。`);}
     this.updateWeather();
@@ -166,6 +201,7 @@ export class World {
     advanceOutdoor(this);
     advanceLocalActions(this);
     this.appointments();
+    if(this.syncing){this.maintain();return;}
     for(const c of this.state.conversations){if(c.status!=='active')continue;if((!c.pending&&(c.participants.includes('player')?this.elapsed-(this.playerTalkIdle.get(c.id)??this.elapsed)>180:this.state.clock>c.expires))||c.messages.length>=6){this.endConversation(c.id);continue;}if(!c.participants.includes('player')&&!c.pending&&this.state.clock>=c.nextTurn){const next=c.participants[c.messages.length%2];const a=this.actor(next);if(!a.busy&&this.lanes.dialogue<realtimeLimits.dialogue){c.pending=true;this.job(a,()=>this.respond(c,a),'dialogue');}}}
     for(const request of [...this.state.society.requests]){
       if(!isRunning(this.state))break;
@@ -197,6 +233,9 @@ export class World {
       if(needsPlan)this.job(a,()=>this.plan(a),'background');
       else {const reflection=this.state.reflectionQueue.find(r=>r.actorId===a.id);if(reflection)this.job(a,()=>this.reflect(a,reflection.day),'background');}
     }
+    this.maintain();
+  }
+  private maintain(){
     if(Date.now()-this.lastSave>2000){this.persist();this.lastSave=Date.now();}
     if(Date.now()-this.lastDocs>30000){this.documents.scan();this.lastDocs=Date.now();}
   }
@@ -417,7 +456,7 @@ export class World {
     return bubbles.slice(-12);
   }
   snapshot(observer=false):Snapshot{
-    return {timing:this.simulationRate.snapshot(this.state.dayMinutes,isRunning(this.state)&&this.active>0),laboratory:{active:this.lab.active,id:this.lab.current?.id,completed:this.lab.current?.samples.filter(s=>!['queued','running'].includes(s.status)).length??0,total:this.lab.current?.samples.length??0},performance:{active:{...this.lanes},limits:{...realtimeLimits},lastFastContextTokens:this.lastFastContextTokens},bubbles:this.visibleBubbles(observer),society:{births:this.state.society.births,cases:this.state.society.cases.map(({perpetrator,evidence,...c})=>c)},id:this.state.id,clock:this.state.clock,dayMinutes:this.state.dayMinutes,status:this.state.status,mode:this.state.mode,weather:this.state.weather,actors:this.state.actors.map(publicActor),player:this.state.player,events:this.state.events.filter(e=>observer||e.audience.includes('public')||e.audience.includes('player')).slice(-80),conversations:this.state.conversations.filter(c=>observer||c.participants.includes('player')).slice(-25),appointments:this.state.appointments.filter(p=>observer||p.from==='player'||p.to==='player'),quests:this.state.quests,usage:this.store.usage(),configured:this.gateway.configured,notice:this.state.notice,observer,...observer?{actionTraces:this.store.traces().filter(t=>t.worldId===this.state.id),privateActors:this.state.actors,decisions:this.state.decisions,documentErrors:this.documents.errors()}: {}};
+    return {timing:this.simulationRate.snapshot(this.state.dayMinutes,isRunning(this.state)&&this.syncing&&this.pendingSimulation>0),laboratory:{active:this.lab.active,id:this.lab.current?.id,completed:this.lab.current?.samples.filter(s=>!['queued','running'].includes(s.status)).length??0,total:this.lab.current?.samples.length??0},performance:{active:{...this.lanes},limits:{...realtimeLimits},lastFastContextTokens:this.lastFastContextTokens},bubbles:this.visibleBubbles(observer),society:{births:this.state.society.births,cases:this.state.society.cases.map(({perpetrator,evidence,...c})=>c)},id:this.state.id,clock:this.state.clock,dayMinutes:this.state.dayMinutes,status:this.state.status,mode:this.state.mode,weather:this.state.weather,actors:this.state.actors.map(publicActor),player:this.state.player,events:this.state.events.filter(e=>observer||e.audience.includes('public')||e.audience.includes('player')).slice(-80),conversations:this.state.conversations.filter(c=>observer||c.participants.includes('player')).slice(-25),appointments:this.state.appointments.filter(p=>observer||p.from==='player'||p.to==='player'),quests:this.state.quests,usage:this.store.usage(),configured:this.gateway.configured,notice:this.state.notice,observer,...observer?{actionTraces:this.store.traces().filter(t=>t.worldId===this.state.id),privateActors:this.state.actors,decisions:this.state.decisions,documentErrors:this.documents.errors()}: {}};
   }
   command(id:string,run:()=>unknown){if(this.state.commandIds.includes(id))return this.state.commandResults[id]??{ok:true};const result=run();this.state.commandIds.push(id);this.state.commandIds=this.state.commandIds.slice(-1000);this.state.commandResults[id]=result;for(const key of Object.keys(this.state.commandResults))if(!this.state.commandIds.includes(key))delete this.state.commandResults[key];this.persist();return result;}
 }

@@ -1,13 +1,15 @@
 import type { OutdoorKind } from './types';
 export type ActionCategory='common'|'place'|'profession'|'situation'|'planning';
 export const actionCategoryNames:Record<ActionCategory,string>={common:'通用行动',place:'场所行动',profession:'身份行动',situation:'情境行动',planning:'重新规划'};
-export interface ActionCandidate {label:string;kind:string;definitionId?:string;category?:ActionCategory;target?:string;item?:string;outdoorKind?:OutdoorKind}
+export interface ActionCandidate {label:string;kind:string;definitionId?:string;category?:ActionCategory;target?:string;item?:string;outdoorKind?:OutdoorKind;arrival?:ActionCandidate}
+export interface TravelIntent {destination:string;action:ActionCandidate;revision:number;approvedAt:number;expiresAt:number;label:string}
 export interface LocalAction {candidate:ActionCandidate;startedAt:number;endsAt:number}
 export interface PlanRequest {id:string;day:number;kind:'daily'|'replan';reason:string;attempts:number;retryAt:number;retryWallAt:number}
 export interface PlanningState {
   day:number;dailyIssuedDay:number;plannedDay:number;lastPlannedAt:number;lastReason:string;
   replanCount:number;callsToday:number;nextReplanAt:number;nextReplanWallAt:number;
   contextVersion:number;failures:number;completedActions:number;
+  plannedContextVersion?:number;
   issues:{code:string;detail:string;at:number}[];request:PlanRequest|null;inFlight:string|null;
 }
 export interface ActionPolicyView {

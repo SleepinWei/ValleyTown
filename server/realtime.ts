@@ -4,7 +4,7 @@ import { dayOf, timeOf } from '../shared/types';
 import { environmentContext } from '../shared/weather';
 import { regionAt } from '../shared/map';
 
-export const realtimeLimits={action:6,dialogue:3,background:2};
+export const realtimeLimits={action:12,dialogue:3,background:4};
 // Full memories remain in SQLite / Markdown. Only the fast call's working set is bounded.
 export function fastContext(state:WorldState,a:Actor,targets:string[]=[]){
  const relevant=new Set(targets);

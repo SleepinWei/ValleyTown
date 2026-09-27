@@ -1,3 +1,4 @@
+import type { BudgetProvider } from '../shared/budget';
 import 'dotenv/config';
 import { modelAttempts } from './telemetry';
 import { postNative } from './http';
@@ -10,17 +11,17 @@ export const estimateTokens=(value:unknown)=>{const s=typeof value==='string'?va
 export class ModelGateway {
   get configured(){return {jev:!!process.env.VALLEYTOWN_JEV_API_KEY,deepseek:!!process.env.DEEPSEEK_API_KEY};}
   constructor(public store:Store,public canRun:()=>boolean=()=>true,public onBudget:()=>void=()=>{}){}
-  private async post(provider:string,purpose:string,model:string,url:string,key:string|undefined,body:unknown,reservation:number):Promise<{data:any;latency:number}> {
+  private async post(provider:BudgetProvider,purpose:string,model:string,url:string,key:string|undefined,body:unknown,reservation:{input:number;output:number}):Promise<{data:any;latency:number}> {
     for(let attempt=0;;attempt++){
       try{return await this.postOnce(provider,purpose,model,url,key,body,reservation,attempt>0);}
       catch(error){const e=error as Error;const transient=e.message==='fetch failed'||e.message.startsWith('模型网络请求未完成')||/HTTP (429|5\d\d)/.test(e.message);if(attempt>=1||!transient||!this.canRun())throw error;await new Promise(resolve=>setTimeout(resolve,1000));}
     }
   }
-  private async postOnce(provider:string,purpose:string,model:string,url:string,key:string|undefined,body:unknown,reservation:number,nativeFallback=false):Promise<{data:any;latency:number}> {
+  private async postOnce(provider:BudgetProvider,purpose:string,model:string,url:string,key:string|undefined,body:unknown,reservation:{input:number;output:number},nativeFallback=false):Promise<{data:any;latency:number}> {
     if(!this.canRun())throw new Error('模拟已暂停');
     if(!key)throw new Error(`${provider} 尚未配置 API 密钥`);
     let id:string;
-    try{id=this.store.reserve(provider,purpose,model,reservation);}catch(e){if(e instanceof BudgetError)this.onBudget();throw e;}
+    try{id=this.store.reserve(provider,purpose,model,reservation.input,reservation.output);}catch(e){if(e instanceof BudgetError)this.onBudget();throw e;}
     const start=Date.now();
     try {
       const response=nativeFallback||process.env.MODEL_HTTP_TRANSPORT==='curl'?await postNative(url,key,body):await fetch(url,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)});
@@ -29,8 +30,8 @@ export class ModelGateway {
       const usage=data.usage;
       const input=provider==='Jev'?usage?.input_tokens:usage?.prompt_tokens;
       const output=provider==='Jev'?usage?.output_tokens:usage?.completion_tokens;
-      this.store.settle(id,input,output,Date.now()-start,data.model);
-      const current=this.store.usage();if(current.used+current.reserved>=current.limit)this.onBudget();
+      this.store.settle(id,input,output,Date.now()-start,data.model,provider==='DeepSeek'?(usage?.prompt_cache_hit_tokens??usage?.prompt_tokens_details?.cached_tokens??0):0);
+      if(this.store.exhaustedProvider([provider]))this.onBudget();
       return {data,latency:Date.now()-start};
     }catch(e){
       const cause=(e as Error).cause as {code?:string;message?:string;preflight?:boolean}|undefined;
@@ -41,7 +42,7 @@ export class ModelGateway {
   async jev(state:unknown,questions:Record<string,Question>,purpose='decision'):Promise<JevResult>{
     const model=process.env.JEV_MODEL||'jev-1.13.0';
     const body={model,state,questions};
-    const {data,latency}=await this.post('Jev',purpose,model,process.env.JEV_ENDPOINT||'https://api.typesafe.ai/v1/systemone',process.env.VALLEYTOWN_JEV_API_KEY,body,estimateTokens(body)+768);
+    const {data,latency}=await this.post('Jev',purpose,model,process.env.JEV_ENDPOINT||'https://api.typesafe.ai/v1/systemone',process.env.VALLEYTOWN_JEV_API_KEY,body,{input:estimateTokens(body),output:768});
     for(const [id,q] of Object.entries(questions)){
       const a:Answer=data.answers?.[id];
       if(!a||a.type!==q.type)throw new Error('Jev 返回的题目类型不匹配');
@@ -61,7 +62,7 @@ export class ModelGateway {
   async text(system:string,state:unknown,purpose:string,maxTokens=768):Promise<{text:string;input:number;output:number;latency:number;model:string}>{
     const model='deepseek-flash';
     const body={model,messages:[{role:'system',content:system},{role:'user',content:JSON.stringify(state)}],thinking:{type:(['plan','daily-plan','replan','reflection'].includes(purpose))&&process.env.DEEPSEEK_BACKGROUND_THINKING==='true'?'enabled':'disabled'},max_tokens:maxTokens,stream:false,...purpose==='benchmark-action'?{response_format:{type:'json_object'}}:{}};
-    const {data,latency}=await this.post('DeepSeek',purpose,model,`${(process.env.DEEPSEEK_BASE_URL||'https://api.deepseek.com').replace(/\/$/,'')}/chat/completions`,process.env.DEEPSEEK_API_KEY,body,estimateTokens(body)+maxTokens);
+    const {data,latency}=await this.post('DeepSeek',purpose,model,`${(process.env.DEEPSEEK_BASE_URL||'https://api.deepseek.com').replace(/\/$/,'')}/chat/completions`,process.env.DEEPSEEK_API_KEY,body,{input:estimateTokens(body),output:maxTokens});
     const text=data.choices?.[0]?.message?.content;
     if(typeof text!=='string'||!text.trim())throw new Error('DeepSeek 未返回可用文本');
     return {text:text.trim(),input:data.usage.prompt_tokens,output:data.usage.completion_tokens,latency,model:data.model};

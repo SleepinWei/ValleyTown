@@ -1,0 +1,9 @@
+.budget-pool{margin:16px 0;padding:16px;border:1px solid var(--border,#dce3d7);border-radius:12px;background:var(--surface,#fff)}
+.budget-pool-title{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.budget-pool-title h4{margin:0;font-size:15px}.budget-pool-title span{font-size:12px;color:#667360}
+.budget-pool .usage-big{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.budget-pool .usage-meta{flex-wrap:wrap;gap:8px}.budget-pool label,.budget-pricing label{display:block;margin-bottom:8px;font-size:13px}
+.budget-pool .input-row input,.budget-pricing .input-row input{min-width:0;flex:1;width:100%}
+.budget-pool .input-row button,.budget-pricing .input-row button{flex-shrink:0}
+.budget-pricing summary{cursor:pointer;font-size:13px}.budget-pricing form{margin-top:12px}
+.budget-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.budget-status span{white-space:nowrap}

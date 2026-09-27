@@ -1,10 +1,11 @@
+import { budgetLimitsFromEnv } from '../server/pricing';
 import 'dotenv/config';
 import { resolve } from 'node:path';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { Store } from '../server/store';
 import { ModelGateway } from '../server/models';
 // This bounded check uses the same persistent ledger as the application.
-const store=new Store(resolve(process.env.DATA_DIR||'data'),Number(process.env.TOKEN_LIMIT)||5_000_000);
+const store=new Store(resolve(process.env.DATA_DIR||'data'),budgetLimitsFromEnv());
 const gateway=new ModelGateway(store);const results:Record<string,unknown>={at:new Date().toISOString(),scope:'一次中文 Jev 判断与一次短 DeepSeek 表达，不代表 3 游戏日实测'};
 const provider=process.argv[2]||'all';
 if(provider!=='deepseek')

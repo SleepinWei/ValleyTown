@@ -1,7 +1,8 @@
+import type { BudgetPool, BudgetProvider } from './budget';
 import type { PlanningState, LocalAction } from './actions';
 import type { ActionTrace } from './telemetry';
 export type Point = { x: number; y: number };
-export type RunStatus = 'paused_manual' | 'paused_token_limit' | 'running_live';
+export type RunStatus = 'paused_manual' | 'paused_budget_limit' | 'running_live';
 export type Mode = 'live' | 'demo';
 export interface Relation { affection: number; trust: number; attraction: number; resentment: number; familiarity: number }
 export interface Memory { id: string; day: number; minute: number; text: string; source: string; kind: 'experience' | 'belief' | 'commitment' | 'reflection' | 'editor'; important: boolean }
@@ -31,7 +32,9 @@ export interface SocietyState {
 export const freshLife=():LifeState=>({status:'alive',stage:'adult',spouse:null,parents:[],children:[],bornAt:null,diedAt:null,marriedAt:null,custody:null,aggressive:false});
 export const freeAdult=(a:Actor)=>a.life.status==='alive'&&a.life.stage==='adult'&&!a.life.custody;
 export interface Actor extends Point {
+  storyEventIds?:string[];storyHistoryStart?:number;
   planning?:PlanningState; decisionReason?:string; localTask?:LocalAction|null;
+  travelIntent?:import('./actions').TravelIntent|null; recentActions?:{at:number;label:string;target?:string}[];
   life:LifeState;
   outdoor:OutdoorState;
   id: string; name: string; role: string; age: number; color: string; hair: string; skin: string;
@@ -61,7 +64,7 @@ export interface WorldState {
   pending: { kind: string; actorId: string; revision: number; data: any }[];
 }
 export interface PendingSpeech { conversationId: string; speaker: string; revision: number; turn: number; text: string; source: string; intent: string; fragment: number | null; warmth?: number; proposal?: { place: string; at: number }; decision: Decision }
-export interface Usage { limit: number; used: number; reserved: number; unknown: number; calls: number; input: number; output: number; byProvider: Record<string, { input: number; output: number; calls: number; latency: number }>; recent: CallRecord[] }
+export interface Usage { currency: 'CNY'; pools: Record<BudgetProvider, BudgetPool>; usdCny: number; used: number; reserved: number; unknown: number; calls: number; input: number; output: number; byProvider: Record<string, { input: number; output: number; calls: number; latency: number }>; recent: CallRecord[] }
 export interface CallRecord { id: string; provider: string; purpose: string; model: string; status: string; input: number; output: number; reserved: number; latency: number; created: number; error: string | null }
 export interface DocumentView { id: string; actorId: string; revision: number; text: string; file: string; error?: string; imported?: string }
 export interface SpeechBubble {id:string;actorId:string;text:string;source:string;at:number;pending:boolean}

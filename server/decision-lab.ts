@@ -42,7 +42,7 @@ export function syntheticInputs(scenario:LabScenario):LabRun['inputs']{
 export class DecisionLab {
   active=false;current?:LabRun;gateway:ModelGateway;settled:Promise<void>=Promise.resolve();
   constructor(private world:World){
-    this.gateway=new ModelGateway(world.store,()=>this.active&&this.current?.status==='running'&&world.state.status==='running_live',()=>world.pause('paused_token_limit'));
+    this.gateway=new ModelGateway(world.store,()=>this.active&&this.current?.status==='running'&&world.state.status==='running_live',()=>world.pause('paused_budget_limit'));
     for(const run of world.store.labs(100))if(run.status==='running'||run.status==='stopping'){
       run.status='interrupted';run.finished=Date.now();for(const s of run.samples)if(s.status==='queued'||s.status==='running')s.status='interrupted';world.store.putLab(run);
     }
@@ -52,7 +52,7 @@ export class DecisionLab {
     if(this.active||w.active||w.state.status==='running_live')throw new Error('请先暂停小镇并等待所有在途请求结算');
     if(w.state.mode!=='live')throw new Error('请先在设置中切换到真实 Agent 模式');
     if(!this.gateway.configured.jev||(paired&&!this.gateway.configured.deepseek))throw new Error('请先配置本次实验需要的模型密钥');
-    const usage=w.store.usage();if(usage.used+usage.reserved>=usage.limit)throw new Error('token 额度不足，请先调整上限');
+    const exhausted=w.store.exhaustedProvider(paired?['Jev','DeepSeek']:['Jev']);if(exhausted)throw new Error(`${exhausted} 金额池额度不足，请先调整上限`);
     const created=Date.now(),inputs=profile==='synthetic'?syntheticInputs(scenario):scenarioInputs(w,actorId,scenario);
     const run:LabRun={id:randomUUID(),actorId,actorName:profile==='synthetic'?'合成测试居民':w.actor(actorId).name,profile,scenario,repeats,paired,status:'running',created,inputs,samples:[]};
     for(let pair=0;pair<repeats;pair++)for(const variant of (pair%2?['after','before']:['before','after']) as ('before'|'after')[])for(const provider of (paired?['Jev','DeepSeek']:['Jev']) as LabSample['provider'][]){
@@ -62,7 +62,7 @@ export class DecisionLab {
     // Two independent serial lanes: at most one request per provider; no NPC work runs concurrently.
     this.settled=this.execute(run).finally(()=>{
       run.status=run.status==='running'?'complete':'cancelled';run.finished=Date.now();this.active=false;
-      w.store.putLab(run);delete w.state.laboratoryRun;w.pause(w.state.status==='paused_token_limit'?'paused_token_limit':'paused_manual');
+      w.store.putLab(run);delete w.state.laboratoryRun;w.pause(w.state.status==='paused_budget_limit'?'paused_budget_limit':'paused_manual');
       w.state.notice=run.status==='complete'?'决策实验完成，小镇仍暂停。结果已保存，未改变居民或事件。':'决策实验已停止，在途用量已结算；小镇仍暂停。';w.persist();w.onChange();
     });
     return run;

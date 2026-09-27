@@ -1,8 +1,9 @@
+import { budgetLimitsFromEnv } from './pricing';
 import 'dotenv/config';
 import { resolve } from 'node:path';
 import { SimulationWorker } from './worker-client';
 import { createApp } from './app';
-const world=new SimulationWorker({dir:resolve(process.env.DATA_DIR||'data'),mode:process.env.MODEL_MODE==='demo'?'demo':'live',limit:Number(process.env.TOKEN_LIMIT)||5_000_000});
+const world=new SimulationWorker({dir:resolve(process.env.DATA_DIR||'data'),mode:process.env.MODEL_MODE==='demo'?'demo':'live',limits:budgetLimitsFromEnv()});
 await world.ready;
 const app=await createApp(world);
 await app.listen({host:'127.0.0.1',port:Number(process.env.PORT)||3001});

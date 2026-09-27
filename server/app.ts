@@ -39,6 +39,10 @@ export async function createApp(world:World|SimulationWorker,options:{internal?:
     world.onFailure=()=>{for(const socket of sockets.keys())socket.close(1011,'模拟线程停止，请重启服务');};
     app.addHook('onClose',async()=>{for(const socket of sockets.keys())socket.close();await world.close();});
   }else{
+  const storyView=(query:unknown)=>z.object({view:z.enum(['player','observer']).default('player')}).parse(query).view;
+  app.get('/api/stories/:actorId',async req=>world.stories.get(z.string().max(100).parse((req.params as any).actorId),storyView(req.query)));
+  app.post('/api/stories/:actorId',async req=>world.stories.start(z.string().max(100).parse((req.params as any).actorId),storyView(req.query)));
+  app.get('/api/story-jobs/:id',async req=>world.stories.job(z.string().uuid().parse((req.params as any).id),storyView(req.query)));
   app.get('/api/action-policy/:actorId',async req=>{
     const a=world.actor(z.string().parse((req.params as any).actorId)),eligibility=replanEligibility(a,world.state.clock);
     return {catalog:actionRegistry.map(({id,category,description})=>({id,category,description})),candidates:buildActions(world,a),planning:planning(a,world.state.clock),canReplan:eligibility.allowed,replanReason:eligibility.reason,localTask:a.localTask??null,mode:world.state.mode,reflection:process.env.DEEPSEEK_REFLECTION==='true'?'model':'local',usage:world.store.db.prepare("SELECT purpose,COUNT(*) AS calls,SUM(input) AS input,SUM(output) AS output FROM calls WHERE provider='DeepSeek' GROUP BY purpose").all()};
@@ -50,11 +54,13 @@ export async function createApp(world:World|SimulationWorker,options:{internal?:
   });
   app.post('/api/decision-lab/stop',async()=>{world.pause();return {ok:true};});
   app.post('/api/control',async req=>{
-    const b=z.object({action:z.enum(['pause','resume','speed','mode','limit']),value:z.union([z.string(),z.number()]).optional()}).parse(req.body);
+    const b=z.object({action:z.enum(['pause','resume','speed','mode','limit','exchange']),value:z.union([z.string(),z.number()]).optional(),provider:z.enum(['DeepSeek','Jev']).optional()}).parse(req.body);
     if(b.action==='pause')world.pause();if(b.action==='resume')world.resume();
     if(b.action==='speed'){const speed=z.number().finite().min(5).max(120).parse(b.value);world.setDayMinutes(speed);}
     if(b.action==='mode'){if(isRunning(world.state)||world.active)throw new Error('请暂停并等待在途请求结束，再切换模式');world.state.mode=z.enum(['demo','live']).parse(b.value);world.state.notice=world.state.mode==='demo'?'规则演示模式 · 无模型费用':'真实模型模式 · 使用 Jev 与 DeepSeek';}
-    if(b.action==='limit')world.store.setLimit(z.number().int().positive().parse(b.value));
+    if(b.action==='limit')world.store.setLimit(z.enum(['DeepSeek','Jev']).parse(b.provider),z.number().finite().min(0).parse(b.value));
+    if(b.action==='exchange')world.store.setExchange(z.number().finite().positive().max(100).parse(b.value));
+    if(b.action==='limit'&&world.state.mode==='live'&&isRunning(world.state)&&world.store.exhaustedProvider())world.pause('paused_budget_limit');
     world.persist();return {ok:true};
   });
   app.post('/api/commands',async req=>{

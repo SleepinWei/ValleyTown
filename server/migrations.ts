@@ -22,6 +22,7 @@ export function migrateWorld(world:WorldState):WorldState{
   // Old saves may contain offline time debt. Discard it without advancing the clock
   // or altering completed events, pending results, or the token ledger.
   const legacy=world as Omit<WorldState,'status'> & {status:string;catchupTarget?:number|null;offlineDays?:number};
+  if(legacy.status==='paused_token_limit'){legacy.status='paused_budget_limit';world.notice='已迁移为人民币金额池，请检查 DeepSeek 与 Jev 上限后继续。';}
   const wasCatchingUp=legacy.status==='running_catchup';
   if(wasCatchingUp)legacy.status='running_live';
   if(wasCatchingUp||/离线|补算/.test(world.notice)){

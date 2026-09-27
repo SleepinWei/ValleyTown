@@ -21,7 +21,7 @@ export function SimulationSpeed({world,onChange}:{world:Snapshot;onChange:(dayMi
   },[draft,onChange,target]);
   const paused=world.status!=='running_live';
   const actual=paused?0:world.timing?.actualMultiplier??0;
-  const status=paused?'已暂停':world.laboratory?.active?'实验中，时间冻结':world.timing?.waitingForApi?'等待 API，时间与移动同步等待':'按目标推进';
+  const status=paused?'已暂停':world.laboratory?.active?'实验中，时间冻结':world.timing?.waitingForApi?'关键节点同步中':Object.values(world.performance?.active??{}).some(n=>n>0)?'异步决策，行动继续':'按目标推进';
   return <div className="speed-control" aria-label="模拟速率">
     <div className="speed-label"><label htmlFor={id}><Clock3 size={14}/> 目标速率</label><output htmlFor={id}>{value.toFixed(2)}×</output></div>
     <input id={id} type="range" min="0.25" max="6" step="0.25" value={value}

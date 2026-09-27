@@ -1,3 +1,4 @@
+import type { BudgetLimits } from '../shared/budget';
 import { Worker } from 'node:worker_threads';
 import type { Snapshot } from '../shared/types';
 
@@ -8,7 +9,7 @@ export class SimulationWorker {
  snapshots:{player:Snapshot;observer:Snapshot}|null=null;
  onSnapshot=()=>{};onFailure=(_error:Error)=>{};
  readonly ready:Promise<void>;
- constructor(options:{dir:string;mode:'live'|'demo';limit:number}){
+ constructor(options:{dir:string;mode:'live'|'demo';limits?:BudgetLimits}){
   // tsx registration must occur inside the worker before loading TypeScript modules.
   this.worker=new Worker(new URL('./simulation-worker.mjs',import.meta.url),{workerData:options,execArgv:[]});
   this.ready=new Promise((resolve,reject)=>{
