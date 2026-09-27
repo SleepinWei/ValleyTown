@@ -1,0 +1,250 @@
+% !TEX program = xelatex
+% Build: xelatex -interaction=nonstopmode -halt-on-error valleytown.tex (twice)
+\documentclass[aspectratio=169,10pt,fontset=fandol]{ctexbeamer}
+\usepackage{booktabs,tabularx,array,graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\usefonttheme{professionalfonts}
+\setsansfont{texgyreheros-regular.otf}[BoldFont=texgyreheros-bold.otf,ItalicFont=texgyreheros-italic.otf,BoldItalicFont=texgyreheros-bolditalic.otf]
+\setmonofont{texgyrecursor-regular.otf}[BoldFont=texgyrecursor-bold.otf]
+\definecolor{Forest}{HTML}{294C3D}
+\definecolor{Ink}{HTML}{263A33}
+\definecolor{Muted}{HTML}{67736C}
+\definecolor{Paper}{HTML}{F8F7F0}
+\definecolor{Jev}{HTML}{087F82}
+\definecolor{DS}{HTML}{76618E}
+\definecolor{Gold}{HTML}{A77E3E}
+\setbeamercolor{normal text}{fg=Ink,bg=Paper}
+\setbeamercolor{structure}{fg=Forest}
+\setbeamercolor{frametitle}{fg=Forest}
+\setbeamercolor{alerted text}{fg=Jev}
+\setbeamercolor{footline}{fg=Muted,bg=Paper}
+\setbeamerfont{frametitle}{size=\Large,series=\bfseries}
+\setbeamerfont{footline}{size=\tiny}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\small\textbullet}
+\setbeamertemplate{itemize subitem}{\textbullet}
+\setbeamertemplate{frametitle}{\vspace{3mm}\insertframetitle\par\vspace{1mm}}
+\setbeamertemplate{footline}{\hspace{6mm}溪谷镇\enspace /\enspace ValleyTown\hfill\insertframenumber\enspace /\enspace\inserttotalframenumber\hspace{6mm}\vspace{3mm}}
+\setbeamersize{text margin left=7mm,text margin right=7mm}
+\setlength{\parskip}{5pt}
+\renewcommand{\arraystretch}{1.38}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\source}[1]{\vfill{\fontsize{6.3}{8}\selectfont\color{Muted}#1\par}}
+\newcommand{\lead}[1]{{\large\color{Forest}#1}\par\medskip}
+\newcommand{\key}[1]{\textbf{\color{Forest}#1}}
+\newcommand{\jev}[1]{\textbf{\color{Jev}#1}}
+\newcommand{\ds}[1]{\textbf{\color{DS}#1}}
+\newcommand{\code}[1]{{\ttfamily\small #1}}
+\newcommand{\point}[2]{\key{#1}\par{\small #2}\par\medskip}
+\title{溪谷镇 ValleyTown}
+\subtitle{Agent 设计与性能实测}
+\author{Jev 决策与 Agent Harness}
+\date{2026 年 9 月 27 日}
+\hypersetup{pdftitle={溪谷镇 ValleyTown：Agent 设计与性能实测},pdfauthor={ValleyTown},pdfsubject={Jev 与 Agent Harness},colorlinks=true,urlcolor=Jev}
+\begin{document}
+
+% 01
+\begin{frame}[plain]
+\begin{columns}[c,onlytextwidth]
+\column{.46\textwidth}
+{\fontsize{29}{36}\selectfont\bfseries\color{Forest}溪谷镇}\par
+{\fontsize{22}{28}\selectfont\color{Forest}ValleyTown}\par\bigskip
+{\Large Agent 设计与性能实测}\par\medskip
+{\color{Jev}\large Jev 决策与 Agent Harness}\par\bigskip
+{\small 24 位初始成年居民、\par 各自拥有记忆与行动选择}\par\bigskip
+{\footnotesize\color{Muted}实现快照 · 2026.09.27}
+\column{.51\textwidth}
+\includegraphics[width=\linewidth,height=6.8cm,keepaspectratio]{assets/cover.png}
+\end{columns}
+\end{frame}
+
+% 02
+\begin{frame}{模型与运行时的职责分配}
+\begin{tabularx}{\linewidth}{@{}p{2.4cm}Yp{4.1cm}@{}}
+\toprule
+\key{组件} & \key{负责什么} & \key{交付给下一层的结果}\\\midrule
+\jev{Jev 1.13.0} & 高频行动、社交意愿、对白意图、关系评分与表达核验 & 类型化选项、分数与概率分布\\[2mm]
+\ds{DeepSeek}\par\ds{Flash} & 按需阶段规划；将获准意图写成中文；手动故事整理 & 阶段目标或候选文字\\[2mm]
+\key{本地 Harness} & 生成候选、隔离上下文、调度、验证、提交、记忆和预算 & 可执行的世界变化与可追踪记录\\
+\bottomrule
+\end{tabularx}\par
+\medskip
+\lead{Jev 决定此刻做什么；运行时保证选择能够合法落地}
+\source{实现：server/models.ts；server/world.ts；server/actions.ts。日终默认使用本地摘录，DeepSeek 反思为可选配置。}
+\end{frame}
+
+% 03
+\begin{frame}{单个 NPC 的决策闭环}
+\begin{center}
+\input{figures/npc-agent-flow.tex}
+\end{center}
+\vspace{-1mm}
+\begin{columns}[T,onlytextwidth]
+\column{.49\textwidth}
+{\small\jev{快慢任务分离}\quad 行动 12／对白 3／后台 4，\par 规划不占行动槽位或行动忙碌锁。}
+\column{.48\textwidth}
+{\small\key{Harness 本地持续执行}\quad 移动、工作与休息\par 无需逐帧调用；暂停、校验与重试统一处理。}
+\end{columns}
+\source{适用于成年自由居民；每人每日额外重规划最多 1 次。玩家开放式回复仍可按需生成；已知意图也可直接本地表达。\par 实现：server/world.ts；server/planning.ts；server/realtime.ts；server/actions.ts。}
+\end{frame}
+
+% 04
+\begin{frame}{角色上下文与行动契约}
+\begin{columns}[T,onlytextwidth]
+\column{.47\textwidth}
+\lead{每位居民有独立的认知范围}
+\point{只读本人的上下文}{人设、需求、目标、本人秘密与记忆；\par 按需加入相关居民的关系数值。}
+\point{快速工作集有界}{4 条重要记忆、4 条当日记忆、\par 最近 3 次行动；完整历史持续保存。}
+\point{信息通过交互传播}{听到的转述记为 belief；\par 不直接当成已经验证的世界事实。}
+\column{.48\textwidth}
+\lead{一次选择批准完整活动}
+\point{例：去图书馆阅读 20 分钟}{Jev 同时批准目的地和抵达后的活动；\par 本地寻路与持续任务负责执行。}
+\point{提交与抵达时再次校验}{检查位置、天气、资源和人物版本；\par 失效才重新决策。}
+\point{处理低置信度与过期结果}{低于 0.22 改为等待；雷雨可改为避雨；\par 暂停结果恢复后重新检查。}
+\end{columns}
+\source{实现：server/realtime.ts；server/actions.ts；server/world.ts。活动示例是机制说明，不代表某次模型响应。}
+\end{frame}
+
+% 05
+\begin{frame}{对白链路与信息边界}
+\relax
+{\small
+\begin{tabularx}{\linewidth}{@{}p{3.0cm}Y@{}}
+\toprule
+\jev{1 · Jev 选择与评分} & 本人人设、目标、有限记忆和当前对话；Choice 选意图，Score 评估关系影响\\[1mm]
+\ds{2 · 按需生成表达} & DeepSeek 只接收安全角色描述、公开信息、获准事实与当前对话\\[1mm]
+\jev{3 · Jev Noul 核验} & 自由生成文字必须遵守意图；noul < 0.85 时改用明确标记的本地表达\\[1mm]
+\key{4 · 校验后提交发言} & 再检查角色版本、会话轮次、距离与披露条件；已确认发言进入气泡和记忆\\
+\bottomrule
+\end{tabularx}}\par
+\medskip
+\key{减少不必要的生成}\quad 每段 NPC 会话最多一次 DeepSeek 表达逻辑请求；玩家开放式回复仍可按需生成。
+\source{实现：server/world.ts 的 respond / commitSpeech。拒绝、结束、道歉和获准秘密片段可直接按本地意图模板表达。}
+\end{frame}
+
+% 06
+\begin{frame}{异步调度与按需规划}
+\begin{columns}[T,onlytextwidth]
+\column{.43\textwidth}
+\lead{三个独立任务池}
+\begin{tabularx}{\linewidth}{@{}Yc@{}}\toprule
+\key{任务} & \key{并发上限}\\\midrule
+Jev 行动 & \jev{12}\\
+对白链路 & \jev{3}\\
+DeepSeek 后台规划 & \ds{4}\\\bottomrule
+\end{tabularx}\par\medskip
+{\small 规划不占行动忙碌锁；\par 已确定的移动与活动继续执行。\par 个人事件只等待相关居民，\par 跨日与天气等全局节点需要同步。}
+\column{.52\textwidth}
+\point{有效计划最多复用三天}{重大变化才开放重规划，由 Jev 主动选择；每天额外最多一次。}
+\point{冷却避免重复请求}{额外重规划至少间隔 360 游戏分钟\par 和 60 现实秒；失败保留原目标。}
+\point{记忆与费用持续保留}{日终默认摘录真实经历；请求先预留、\par 按 usage 结算，未知用量仍占预算。}
+\end{columns}
+\source{实现：server/planning.ts；server/realtime.ts；server/world.ts；server/store.ts。日终 DeepSeek 反思为可选配置。}
+\end{frame}
+
+% 07
+\begin{frame}{系统对照：只替换 Jev 承担的判断}
+\lead{相同存档与调度，保留原有规划、表达和校验流程}
+{\small\begin{tabularx}{\linewidth}{@{}Yrr@{}}\toprule
+\key{系统指标} & \jev{Jev + DeepSeek} & \ds{Jev 部分换成 DS}\\\midrule
+现实测试时长 & 92.42 秒 & 80.13 秒\\
+推进游戏时间 & 398.42 分钟 & 379.22 分钟\\
+实际平均倍率（目标 6×） & 5.39× & 5.92×\\
+\key{每游戏小时费用} & \jev{¥0.0306} & \ds{¥0.0926}\\
+完整行动调用 P50 / P95 & 490 / 2,556 ms & 706 / 1,763 ms\\
+HTTP 成功 / 尝试 & 305 / 315 & 210 / 214\\\bottomrule
+\end{tabularx}}\par\medskip
+\key{本轮系统结果}\quad 替换版单位游戏时间费用约为 \jev{3.03 倍}，整体推进未变慢。
+\source{24 人、真实 API、各一轮；替换版因 ¥0.60 预算预留不足提前停止。DS 自评置信度未与 Jev 校准，且有 4 次 JSON 解析失败。\par 非同轨迹重放，不能推断稳定速度优势；费用为本地估算。来源：docs/system-replacement-comparison.md。}
+\end{frame}
+
+% 08
+\begin{frame}{单个行为：从可决策到后端生效}
+\begin{columns}[T,onlytextwidth]
+\column{.36\textwidth}
+{\fontsize{31}{36}\selectfont\color{Jev}490 ms}\par
+\key{行为生效中位延迟}\par\bigskip
+{\fontsize{27}{33}\selectfont\color{Forest}2.98 次/秒}\par
+\key{24 人合计行动吞吐}\par\medskip
+{\small 最快 324 ms，最慢 9.60 秒。\par 单角色启动间隔中位 7.46 秒。}
+\column{.60\textwidth}
+{\small\begin{tabularx}{\linewidth}{@{}Yrr@{}}\toprule
+\key{阶段} & \key{P50} & \key{P95}\\\midrule
+调度排队 & 1 ms & 8 ms\\
+模型调用、重试与验证 & 486 ms & 2,474 ms\\
+返回后到行为提交 & 1 ms & 8 ms\\\midrule
+\key{完整生效延迟} & \jev{490 ms} & \jev{2,476 ms}\\\bottomrule
+\end{tabularx}}\par\medskip
+{\small 275 次已提交行动，含 29 次规则覆盖。\par 不含此前冷却、活动完成或前端显示时间。\par 各阶段分位数分别计算，不能直接相加。}
+\end{columns}
+\source{当前 Jev + DS 基线，目标 6×，平均 5.39×。口径与前页“完整调用”不同：此页排除失败和暂停暂存。\par 来源：docs/current-system-live-measurement.md；output/system-measure/action-latency.json。}
+\end{frame}
+
+% 09
+\begin{frame}{压力测试：时钟更快，行为密度会下降}
+\relax
+{\small\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\linewidth}{@{}Yrrrr@{}}\toprule
+\key{目标倍率} & \key{实际倍率} & \key{行动/秒} & \key{生效 P95} & \key{活动/游戏小时}\\\midrule
+6× & 4.90× & 2.87 & 1.47 秒 & 14.21\\
+12× & 6.72× & 3.71 & 0.86 秒 & 13.79\\
+24× & 6.75× & 3.04 & 1.44 秒 & 12.07\\
+48× 首次 & \jev{45.78×} & \jev{13.54} & 0.57 秒 & 8.12\\
+48× 复测 & \ds{13.36×} & 3.09 & \ds{6.79 秒} & 5.58\\
+72× & 13.36× & 1.57 & 7.54 秒 & 3.85\\
+96× & 62.42× & 9.59 & 0.90 秒 & 5.05\\
+192× & 114.08× & 9.37 & 2.08 秒 & 2.95\\\bottomrule
+\end{tabularx}}\par\medskip
+{\small\key{尚未确认稳定最高倍率}\quad 长尾请求经全局同步放大；\par
+单角色约 1.5 秒调度节流，使 24 人自动选择理论上限约为 16 次/秒。}
+\source{同起点，8 轮各约 45 秒，真实 Jev + DS；只放开隔离副本的速度上限。活动指工作、阅读和休息完成。\par 192× 档活动密度比本轮 6× 低约 79\%；顺序测试受网络波动影响。来源：docs/system-performance-limit.md。}
+\end{frame}
+
+% 10
+\begin{frame}{角色能够选择的行为}
+\lead{本地生成最多 24 个合法候选，Jev 决定此刻做什么}
+{\small\begin{tabularx}{\linewidth}{@{}p{2.0cm}Yp{4.0cm}@{}}\toprule
+\key{行为类别} & \key{当前实现} & \key{主要约束}\\\midrule
+日常与移动 & 等待、休息、避雨；前往地点并执行获准活动 & 体力、天气、地点与状态\\
+职业与照护 & 24 种职业工作；医生帮助居民恢复体力 & 白天、本人工作场所、身份\\
+场所与资源 & 图书馆阅读、购买鱼饵／箭矢；旧桥与集市贡献 & 到场、库存、金币、材料\\
+户外活动 & 河／湖／海钓、慢跑、篮球、登山、打猎 & 装备、耗材、时段与天气\\
+社会交往 & 交谈、赠礼、邀约、表白、回避、纠纷与调解 & 距离、关系、对方状态与意愿\\
+长期选择 & 讨论婚姻／育儿；重大变化时请求重规划 & 双方独立同意、资格与冷却\\\bottomrule
+\end{tabularx}}\par\medskip
+{\small 移动、工作与户外活动由本地持续执行；完成后产生物品、体力变化和记忆。}
+\source{实现：server/actions.ts；server/outdoor-engine.ts；server/society.ts。医生护理是体力恢复，非完整疾病诊疗。}
+\end{frame}
+
+% 11
+\begin{frame}{小镇内置的十种生活事件}
+\begin{columns}[T,onlytextwidth]
+\column{.48\textwidth}
+\point{偶遇与互动}{猫咪带路、飞帽奇遇、失物归还、\par 同款包裹乌龙。}
+\point{职业带来的小故事}{爱心面包、街角即兴曲、速写赠礼。}
+\point{环境中的发现}{野莓惊喜、屋檐听雨、萤火微光。}
+\column{.47\textwidth}
+\lead{事件改变后续决策的上下文}
+{\small 发生条件包含地点、昼夜、天气、\par 职业、物资和居民是否空闲。\par\medskip
+本地规则更新情绪、体力、物品或关系，\par 参与者记住亲历，再由 Agent 决定后续行动。\par\medskip
+支持自然节奏与展示节奏；\par 冷却和近期类型记录减少重复事件。}
+\end{columns}
+\source{事件由本地条件与概率驱动，采用内置文本。来源：server/incidents.ts；shared/incidents.ts。}
+\end{frame}
+
+% 12
+\begin{frame}{约定、家庭与司法形成长期后果}
+\relax
+{\small\begin{tabularx}{\linewidth}{@{}p{2.2cm}Yp{4.2cm}@{}}\toprule
+\key{事件机制} & \key{发生过程} & \key{对 Agent 的后续影响}\\\midrule
+约定与兑现 & 邀请、本人判断接受；河岸见面，雷雨可延期 & 承诺进入记忆，兑现改变关系\\[1mm]
+婚姻与家庭 & 符合关系门槛后，双方独立同意结婚或讨论育儿 & 家庭与照护改变日常\\[1mm]
+冲突与司法 & 纠纷可回避或调解；严格门槛下可能发生致命事件，依据世界证据调查 & 服刑限制行动；\par 逝者保留人物档案\\[1mm]
+天气与建设 & 天气改变开放条件；材料贡献推进旧桥与晚灯集市 & 原行动可失效；\par 状态与经历持续保留\\\bottomrule
+\end{tabularx}}\par\medskip
+\lead{事件进入个人记忆，再影响下一轮选择}
+\source{实现：server/world.ts；server/society.ts；shared/weather.ts。家庭、司法事件由资格与概率控制，非预设必然剧情。\par 当前儿童保持幼年，未实现完整代际成长；这里介绍实现机制，不用验收夹具推算自然发生率。}
+\end{frame}
+
+\end{document}

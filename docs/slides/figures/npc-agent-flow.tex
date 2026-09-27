@@ -1,0 +1,31 @@
+% Native TikZ figure. Dashed links denote optional model assistance.
+\begin{tikzpicture}[
+  >=Stealth,
+  stage/.style={rectangle,rounded corners=2pt,draw=Forest!30,fill=Forest!5,
+    minimum width=2.2cm,minimum height=1cm,align=center,font=\small,inner sep=4pt},
+  assist/.style={rectangle,rounded corners=2pt,draw=DS!40,fill=DS!7,
+    minimum height=1cm,align=center,font=\small,inner sep=5pt},
+  flow/.style={->,draw=Forest!75,line width=.7pt},
+  help/.style={->,dashed,draw=DS,line width=.7pt},
+  labeltext/.style={font=\scriptsize,text=Muted,fill=Paper,inner sep=2pt}
+]
+\node[stage] (sense) at (0,0) {\key{感知}\\本人状态与记忆};
+\node[stage] (prepare) at (2.75,0) {\key{准备}\\本地合法候选};
+\node[stage,draw=Jev,fill=Jev!13] (decide) at (5.5,0) {\jev{JEV 决策}\\高频选择行动};
+\node[stage] (execute) at (8.25,0) {\key{执行}\\本地行动／交谈};
+\node[stage] (memory) at (11,0) {\key{记忆}\\记录结果与状态};
+\draw[flow] (sense) -- (prepare);
+\draw[flow] (prepare) -- (decide);
+\draw[flow] (decide) -- (execute);
+\draw[flow] (execute) -- (memory);
+\draw[flow] (memory.south) -- ++(0,-.48) -| (sense.south);
+\node[labeltext] at (5.5,-.98) {下一次事件唤起决策；持续活动不重复请求模型};
+\node[assist,text width=5.3cm] (plan) at (3.7,1.9)
+  {\ds{DeepSeek · 按需阶段规划}\\{\scriptsize 有效计划最多复用 3 天；重大变化才重规划}};
+\node[assist,text width=4.35cm] (speech) at (9.6,1.9)
+  {\ds{DeepSeek · 按需对白表达}\\{\scriptsize 每段 NPC 会话最多 1 次表达请求}};
+\draw[help] (plan.south) -- ++(0,-.27) -| (decide.north);
+\node[labeltext] at (3.7,.8) {后台更新，行动继续};
+\draw[help] (speech.south) -- ++(0,-.27) -| (execute.north);
+\node[labeltext] at (9.75,.8) {自由生成文字由 JEV Noul 核验};
+\end{tikzpicture}
