@@ -10,7 +10,7 @@ import type { Question } from '../server/models';
 const flush=()=>new Promise<void>(r=>setImmediate(r));
 function setup(){
   const dir=mkdtempSync('/private/tmp/valley-rate-'),store=new Store(dir),w=new World(store,'live');
-  for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}
+  w.state.incidents.nextAt=1e12;for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}
   w.gateway.jev=async(_state,q:Record<string,Question>)=>({answers:Object.fromEntries(Object.entries(q).map(([id,spec])=>[id,spec.type==='choice'?{type:'choice',choice:'wait' in spec.criteria?'wait':Object.keys(spec.criteria)[0],confidence:1}:spec.type==='score'?{type:'score',score:1}:{type:'noul',noul:1}])),model:'stub',input:0,output:0,latency:1});
   w.gateway.text=async()=>({text:'测试计划',model:'stub',input:0,output:0,latency:1});
   w.resume();return {w,store,close(){store.close();rmSync(dir,{recursive:true,force:true});}};
@@ -89,6 +89,20 @@ test('failed decisions release a critical barrier; story generation does not blo
   w.state.clock=959.9;w.state.weatherSlot=3;w.tick(.5);
   assert.ok(w.state.clock>960);assert.equal(w.snapshot().timing.waitingForApi,false);
   w.pause();await flush();
+ }finally{f.close();}
+});
+
+test('local settlement waits for its actor but releases before an unrelated slow job',async()=>{
+ const f=setup();let finish!:()=>void,finishOther!:()=>void;
+ try{
+  const {w}=f,a=w.actor('baker'),other=w.actor('gardener');
+  (w as any).job(a,()=>new Promise<void>(r=>finish=r),'background');
+  (w as any).job(other,()=>new Promise<void>(r=>finishOther=r),'background');
+  a.localTask={candidate:{kind:'rest',label:'休息'},startedAt:w.state.clock,endsAt:w.state.clock+.2};
+  w.tick(.5);assert.equal(w.snapshot().timing.waitingForApi,true);
+  assert.deepEqual(w.snapshot().performance.synchronization?.actors,[a.id]);
+  finish();await flush();w.tick(.5);assert.equal(a.localTask,null);assert.equal(w.lanes.background,1);assert.equal(w.snapshot().timing.waitingForApi,false);
+  w.pause();finishOther();await flush();
  }finally{f.close();}
 });
 

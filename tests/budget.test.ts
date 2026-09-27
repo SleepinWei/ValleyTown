@@ -7,7 +7,7 @@ import { Store, BudgetError } from '../server/store';
 import { ModelGateway } from '../server/models';
 import { World } from '../server/world';
 import { createApp } from '../server/app';
-const setup=()=>{const dir=mkdtempSync('/private/tmp/valley-budget-');const store=new Store(dir,{DeepSeek:1,Jev:1});store.setExchange(7);return {dir,store,close(){store.close();rmSync(dir,{recursive:true,force:true});}};};
+const setup=()=>{const dir=mkdtempSync('/private/tmp/valley-budget-');const store=new Store(dir,{DeepSeek:1,Jev:1});store.setExchange(7);return {dir,store,close(){this.store.close();rmSync(dir,{recursive:true,force:true});}};};
 
 test('provider pools are independent and Jev output never consumes money',()=>{
  const f=setup();try{
@@ -55,7 +55,9 @@ test('old ledger migrates once without clearing completed usage or unknown reser
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('invalid settings are rejected and closing one pool leaves demo mode usable',async()=>{
- const f=setup(),w=new World(f.store,'demo'),app=await createApp(w,{internal:true});try{
+ const f=setup(),w=new World(f.store,'demo'),app=await createApp(w,{internal:true});
+ w.state.incidents.nextAt=1e12;for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}
+ try{
   for(const payload of [{action:'limit',value:10},{action:'limit',provider:'Other',value:10},{action:'limit',provider:'Jev',value:-1},{action:'limit',provider:'Jev',value:.001},{action:'exchange',value:0}])assert.equal((await app.inject({method:'POST',url:'/api/control',payload})).statusCode,400);
   assert.equal((await app.inject({method:'POST',url:'/api/control',payload:{action:'limit',provider:'Jev',value:0}})).statusCode,200);
   assert.equal(f.store.usage().pools.DeepSeek.limitCny,1);w.resume();assert.equal(w.state.status,'running_live');w.pause();w.state.mode='live';assert.throws(()=>w.resume(),BudgetError);

@@ -1,3 +1,4 @@
+import type { IncidentState } from './incidents';
 import type { BudgetPool, BudgetProvider } from './budget';
 import type { PlanningState, LocalAction } from './actions';
 import type { ActionTrace } from './telemetry';
@@ -51,10 +52,11 @@ export interface PublicActor extends Point {
 }
 export interface TownEvent { id: string; at: number; kind: string; text: string; actorIds: string[]; audience: string[]; mode: 'live' | 'offline_compressed'; source?: string }
 export interface Message { id: string; speaker: string; text: string; at: number; source: string }
-export interface Conversation { id: string; participants: string[]; messages: Message[]; status: 'active' | 'ended'; turn: number; pending: boolean; started: number; nextTurn: number; expires: number }
+export interface Conversation { expressionCalls?:number; id: string; participants: string[]; messages: Message[]; status: 'active' | 'ended'; turn: number; pending: boolean; started: number; nextTurn: number; expires: number }
 export interface Appointment { id: string; from: string; to: string; place: string; at: number; status: 'proposed' | 'accepted' | 'fulfilled' | 'missed' | 'declined'; type: 'date' | 'help'; arrived: string[]; togetherSince?: number }
 export interface Quest { id: string; title: string; text: string; progress: number; required: number; completed: boolean; reward: number }
 export interface WorldState {
+  incidents: IncidentState;
   laboratoryRun?:string; society:SocietyState; weatherSlot?:number; rng?:number; version: number; id: string; clock: number; dayMinutes: number; status: RunStatus; mode: Mode; weather: string;
   actors: Actor[]; player: { energy:number; outdoor:OutdoorState; x: number; y: number; path: Point[]; coins: number; inventory: Record<string, number>; conversation: string | null };
   events: TownEvent[]; conversations: Conversation[]; appointments: Appointment[]; quests: Quest[];
@@ -72,8 +74,9 @@ export interface SimulationTiming {
   targetMultiplier:number;actualMultiplier:number;gameMinutesPerSecond:number;waitingForApi:boolean;windowSeconds:number;
 }
 export interface Snapshot {
+  incidents: Pick<IncidentState, 'pace' | 'nextAt' | 'lastAt'>;
   timing:SimulationTiming;
-  bubbles:SpeechBubble[];performance:{active:{action:number;dialogue:number;background:number};limits:{action:number;dialogue:number;background:number};lastFastContextTokens:number};
+  bubbles:SpeechBubble[];performance:{synchronization?:{reason:string;actors:string[]|null;waitMs:number}|null;lastSynchronization?:{reason:string;actors:string[]|null;waitMs:number};active:{action:number;dialogue:number;background:number};limits:{action:number;dialogue:number;background:number};lastFastContextTokens:number};
   id: string; clock: number; dayMinutes: number; status: RunStatus; mode: Mode; weather: string;
   actors: PublicActor[]; player: WorldState['player']; events: TownEvent[]; conversations: Conversation[];
   appointments: Appointment[]; quests: Quest[]; usage: Usage; configured: { jev: boolean; deepseek: boolean };

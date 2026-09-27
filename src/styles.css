@@ -58,3 +58,5 @@
 .speed-actual{font-size:12px;line-height:1.5}.speed-actual>span:last-child{font-size:11px;color:#59634f}
 .speed-hint{font-size:11px;line-height:1.6;color:#666b5f}.speed-error{font-size:12px;color:#a0392d}
 @media(max-width:640px){.world-toolbar{gap:8px;min-height:0;padding:10px 13px}.simulation-controls{width:100%;gap:8px;justify-content:space-between}.speed-control{display:flex;width:100%;order:3}.speed-actual>span:last-child{font-size:12px}.world-toolbar .model-badge{display:inline-flex}.speed-hint{font-size:12px}}
+
+.event-dot.incident{background:#b27d32}.event-row.incident-row p{color:#705324;font-weight:600}.incident-settings .outline{min-height:44px}.incident-settings .hint[role="status"]:empty{display:none}

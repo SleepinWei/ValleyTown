@@ -12,6 +12,8 @@ export function fastContext(state:WorldState,a:Actor,targets:string[]=[]){
   decision:{trigger:a.decisionReason??'当前行动完成或等待到期',planningInProgress:!!planning(a,state.clock).request,canReplan:replanEligibility(a,state.clock).allowed,issues:planning(a,state.clock).issues.slice(-3).map(i=>({code:i.code,detail:i.detail.slice(0,100)}))},
   identity:{name:a.name,role:a.role,persona:a.persona.slice(0,600),goal:a.goal.slice(0,240)},
   clock:{day:dayOf(state.clock),time:timeOf(state.clock)},plan:a.plan.slice(0,320),
+  currentIntent:a.travelIntent?{destination:a.travelIntent.destination,activity:a.travelIntent.label}:null,
+  recentActions:(a.recentActions??[]).slice(-3),
   environment:environmentContext(state.weather,state.clock),region:regionAt(a.x,a.y).name,
   needs:{energy:Math.round(a.energy),mood:a.mood},family:{spouse:a.life.spouse,children:a.life.children,parents:a.life.parents},
   ownMotivation:a.secret.core.slice(0,240),

@@ -1,3 +1,4 @@
+import { freshIncidents } from '../shared/incidents';
 import { expandPopulation } from './population';
 import type { WorldState } from '../shared/types';
 import { TOWN_OFFSET } from '../shared/map';
@@ -17,6 +18,7 @@ export function migrateWorld(world:WorldState):WorldState{
   }
   world.weatherSlot??=weatherSlot(world.clock);world.player.energy??=100;world.player.outdoor??=emptyOutdoor();world.rng??=81927;
   for(const a of world.actors)a.outdoor??=emptyOutdoor();
+  world.incidents??=freshIncidents(world.clock);
   world.society??={requests:[],nextPulse:world.clock,lastMurderDay:-100,births:[],cases:[],dailyFamily:{},nextChild:1};
   if(world.version<3){expandPopulation(world);world.version=3;}
   // Old saves may contain offline time debt. Discard it without advancing the clock

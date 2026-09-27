@@ -1,3 +1,4 @@
+import { setIncidentPace, triggerIncident } from './incidents';
 import { actionRegistry, buildActions } from './actions';
 import { planning, replanEligibility } from './planning';
 import Fastify from 'fastify';
@@ -54,8 +55,9 @@ export async function createApp(world:World|SimulationWorker,options:{internal?:
   });
   app.post('/api/decision-lab/stop',async()=>{world.pause();return {ok:true};});
   app.post('/api/control',async req=>{
-    const b=z.object({action:z.enum(['pause','resume','speed','mode','limit','exchange']),value:z.union([z.string(),z.number()]).optional(),provider:z.enum(['DeepSeek','Jev']).optional()}).parse(req.body);
+    const b=z.object({action:z.enum(['pause','resume','speed','mode','limit','exchange','incident-pace']),value:z.union([z.string(),z.number()]).optional(),provider:z.enum(['DeepSeek','Jev']).optional()}).parse(req.body);
     if(b.action==='pause')world.pause();if(b.action==='resume')world.resume();
+    if(b.action==='incident-pace'){if(world.lab.active)throw new Error('决策实验期间不能改变事件节奏');setIncidentPace(world,z.enum(['natural','showcase']).parse(b.value));}
     if(b.action==='speed'){const speed=z.number().finite().min(5).max(120).parse(b.value);world.setDayMinutes(speed);}
     if(b.action==='mode'){if(isRunning(world.state)||world.active)throw new Error('请暂停并等待在途请求结束，再切换模式');world.state.mode=z.enum(['demo','live']).parse(b.value);world.state.notice=world.state.mode==='demo'?'规则演示模式 · 无模型费用':'真实模型模式 · 使用 Jev 与 DeepSeek';}
     if(b.action==='limit')world.store.setLimit(z.enum(['DeepSeek','Jev']).parse(b.provider),z.number().finite().min(0).parse(b.value));
@@ -65,10 +67,11 @@ export async function createApp(world:World|SimulationWorker,options:{internal?:
   });
   app.post('/api/commands',async req=>{
     if(world.lab.active)throw new Error('决策实验期间世界冻结，请先停止实验');
-    const b=z.object({commandId:z.string().min(1).max(100),type:z.enum(['move','talk','message','end','gift','invite','confess','apologize','breakup','contribute','buy','work','outdoor','cancel-outdoor']),activity:z.enum(['fishing','jogging','basketball','hiking','hunting','rest']).optional(),target:z.string().max(100).optional(),item:z.string().max(40).optional(),text:z.string().max(1000).optional(),x:z.number().finite().optional(),y:z.number().finite().optional()}).parse(req.body);
+    const b=z.object({commandId:z.string().min(1).max(100),type:z.enum(['move','talk','message','end','gift','invite','confess','apologize','breakup','contribute','buy','work','outdoor','cancel-outdoor','incident']),activity:z.enum(['fishing','jogging','basketball','hiking','hunting','rest']).optional(),target:z.string().max(100).optional(),item:z.string().max(40).optional(),text:z.string().max(1000).optional(),x:z.number().finite().optional(),y:z.number().finite().optional()}).parse(req.body);
     return world.command(b.commandId,()=>{
       if(b.type==='end'){if(world.state.player.conversation)world.endConversation(world.state.player.conversation);return {ok:true};}
       world.requireRunning();
+      if(b.type==='incident'){const event=triggerIncident(world,true);if(!event)throw new Error('暂时没有合适的事件：请让居民结束忙碌，或等待至少 6 游戏分钟后再试。');return {ok:true,event};}
       if(b.type==='outdoor'){if(!b.activity||!b.target)throw new Error('请选择活动与地点');world.startOutdoor('player',b.activity,b.target);}
       if(b.type==='cancel-outdoor')world.cancelOutdoor('player');
       if(b.type==='move'){world.cancelOutdoor('player');if(world.state.player.conversation)world.endConversation(world.state.player.conversation);let p=b.target?location(b.target).door:{x:b.x!,y:b.y!};if(!Number.isFinite(p.x)||!Number.isFinite(p.y))throw new Error('坐标无效');const path=pathfind(world.state.player,p);if(!path.length&&distance(world.state.player,p)>1)throw new Error('那里暂时无法到达');world.state.player.path=path;}

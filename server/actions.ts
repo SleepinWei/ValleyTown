@@ -30,16 +30,26 @@ export const professionFor=(a:Actor)=>professions.find(p=>p.role===a.role);
 export function outdoorAvailable(w:World,a:Actor,kind:OutdoorKind){const spec=outdoorActivities[kind];return !outdoorWeatherBlock(w.state.weather,kind)&&a.energy>=Math.ceil(spec.energy*weatherInfo(w.state.weather).effort)&&(!spec.gear||(a.inventory[spec.gear]??0)>0)&&(!spec.consume||(a.inventory[spec.consume]??0)>0)&&(kind!=='hunting'||w.state.clock%1440>=360&&w.state.clock%1440<1140);}
 interface Definition {id:string;category:ActionCategory;description:string;expand:(w:World,a:Actor)=>Record<string,ActionCandidate>}
 const socialTargets=(w:World,a:Actor)=>w.state.actors.filter(b=>b.id!==a.id&&freeAdult(b)&&!b.busy&&!b.conversation&&!b.outdoor.task&&!b.localTask&&distance(a,b)<=8&&(a.socialCooldown[b.id]??0)<=w.state.clock).sort((l,r)=>distance(a,l)-distance(a,r)).slice(0,3);
+function arrivalAction(w:World,a:Actor,place:string):ActionCandidate{
+ const p=professionFor(a);
+ if(place===a.home&&p&&dayTime(w)&&a.energy>=8&&!(p.outdoor&&w.state.weather==='雷雨'))return {kind:'work',label:`${p.label}（40 游戏分钟）`,item:p.item,definitionId:'profession-work'};
+ if(place==='library'&&dayTime(w))return {kind:'read',label:'阅读（20 游戏分钟）',target:place,definitionId:'library-read'};
+ if((a.socialCooldown.outdoor??0)<=w.state.clock)for(const kind of outdoorInterests[a.id]??['jogging','fishing']){
+   const spec=outdoorActivities[kind];
+   if(spec.places.includes(place)&&outdoorAvailable(w,a,kind))return {kind:'outdoor',label:`${spec.name}（${spec.duration} 游戏分钟）`,target:place,outdoorKind:kind,definitionId:`outdoor-${kind}`};
+ }
+ return a.energy<45||place===a.home?{kind:'rest',label:'休息（30 游戏分钟）',definitionId:'basic'}:{kind:'wait',label:'停留观察（10 游戏分钟）',definitionId:'basic'};
+}
 export const actionRegistry:Definition[]=[
  {id:'basic',category:'common',description:'等待、休息与前往最近屋檐；始终提供安全选择',expand:(w:World,a:Actor):Record<string,ActionCandidate>=>({rest:{label:'坐下休息、恢复精力（30 游戏分钟）',kind:'rest'},wait:{label:'观察周围，暂时等待（10 游戏分钟）',kind:'wait'},shelter:{label:`到${w.shelter(a).name}屋檐下${['雷雨','细雨'].includes(w.state.weather)?'避雨':'休息'}`,kind:'shelter',target:w.shelter(a).id}})},
- {id:'travel',category:'common',description:'只负责前往目的地；抵达后重新选择当地可行行动',expand:(w:World,a:Actor):Record<string,ActionCandidate>=>{
+ {id:'travel',category:'common',description:'一次批准目的地与抵达后的活动；抵达时同步校验条件，失效才重新决定',expand:(w:World,a:Actor):Record<string,ActionCandidate>=>{
    const candidates:Record<string,ActionCandidate>={};
    const interests=outdoorInterests[a.id]??['jogging','fishing'];
    const preferred=interests.flatMap(kind=>outdoorActivities[kind].places).sort((l,r)=>distance(a,location(l).door)-distance(a,location(r).door)).slice(0,2);
    const errands=[...(a.inventory.rod&&(a.inventory.bait??0)<3||a.inventory.bow&&(a.inventory.arrows??0)<3?['market']:[]),...(a.energy<45?['clinic']:[]),...(dayTime(w)?['library']:[]),...((a.inventory.wood??0)>0&&!w.state.quests.find(q=>q.id==='bridge')?.completed?['bridge']:[])];
    const sites=[a.home,...errands,...preferred,'square','riverside','seapier','mountaincamp','lakecamp','huntingcamp','sports'];
    for(const place of new Set(sites)){if(near(a,place))continue;if(w.state.weather==='雷雨'&&place!==a.home)continue;if(w.state.weather==='大雾'&&['mountaincamp','huntingcamp'].includes(place))continue;
-    const key=place==='square'||place==='riverside'?place:`go_${place}`;candidates[key]={label:`前往${location(place).name}，到达后再决定具体行动`,kind:'visit',target:place};}
+    const key=place==='square'||place==='riverside'?place:`go_${place}`,arrival=arrivalAction(w,a,place);candidates[key]={label:`前往${location(place).name}并${arrival.label}；抵达时校验条件`,kind:'visit',target:place,arrival};}
    return candidates;
  }},
  {id:'profession-work',category:'profession',description:'本职工作：仅白天、在本人工作地点且精力足够时开放',expand:(w:World,a:Actor):Record<string,ActionCandidate>=>{
@@ -90,7 +100,7 @@ export const actionRegistry:Definition[]=[
     if(canMurder(w,a,b)&&(a.socialCooldown.crimeOffer??-1)>w.state.clock)rows[`murder_${b.id}`]={label:`与${b.name}的冲突升级为致命事件，会被调查并可能入狱；也可离开或调解`,kind:'murder',target:b.id};
    }return rows;
  }},
- {id:'replan',category:'planning',description:'只在计划遇到新情况时请求 DS；每日最多两次，至少间隔三游戏小时与三十秒',expand:(w:World,a:Actor):Record<string,ActionCandidate>=>{const e=replanEligibility(a,w.state.clock);return e.allowed?{replan:{label:`请求重新规划今天：${e.reason.slice(0,140)}。后台处理，期间仍可行动`,kind:'replan'}}:{};}},
+ {id:'replan',category:'planning',description:'只在计划遇到新情况时请求 DS；重大变化才更新，每日最多一次，至少间隔六游戏小时与六十秒',expand:(w:World,a:Actor):Record<string,ActionCandidate>=>{const e=replanEligibility(a,w.state.clock);return e.allowed?{replan:{label:`请求重新规划今天：${e.reason.slice(0,140)}。后台处理，期间仍可行动`,kind:'replan'}}:{};}},
 ];
 export function buildActions(w:World,a:Actor,limit=actionLimit):Record<string,ActionCandidate>{
  if(!freeAdult(a))return {};
@@ -105,7 +115,7 @@ export function validateAction(w:World,a:Actor,c:ActionCandidate):string|undefin
  if(!c.definitionId)return undefined; // Existing saved pending decisions predate the registry; old execution checks still apply.
  const def=actionRegistry.find(d=>d.id===c.definitionId);if(!def)return '动作定义已不存在';
  const candidates=Object.values(def.expand(w,a));
- if(!candidates.some(x=>x.kind===c.kind&&x.target===c.target&&x.item===c.item&&x.outdoorKind===c.outdoorKind))return '位置、身份、开放时间、物品或事件条件已改变';
+ if(!candidates.some(x=>x.kind===c.kind&&x.target===c.target&&x.item===c.item&&x.outdoorKind===c.outdoorKind&&(!c.arrival||(x.arrival?.kind===c.arrival.kind&&x.arrival?.item===c.arrival.item&&x.arrival?.outdoorKind===c.arrival.outdoorKind))))return '位置、身份、开放时间、物品或事件条件已改变';
 }
 export function beginLocalAction(w:World,a:Actor,c:ActionCandidate){
  const duration=c.kind==='work'?40:c.kind==='read'?20:c.kind==='rest'?30:10;

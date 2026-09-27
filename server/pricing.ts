@@ -11,7 +11,9 @@ export function pricing(provider: BudgetProvider, usdCny: number): CallPricing {
   return { version: '2026-09-27-jev-1.13.0', input: .042 * usdCny, cachedInput: .042 * usdCny, output: 0, usdCny };
 }
 export function costNano(rate: CallPricing, input: number, output: number, cachedInput = 0) {
-  const amount = Math.ceil(((input - cachedInput) * rate.input + cachedInput * rate.cachedInput + output * rate.output) * 1000);
+  const price = (value: number) => BigInt(Math.round(value * MONEY_SCALE));
+  const total = BigInt(input - cachedInput) * price(rate.input) + BigInt(cachedInput) * price(rate.cachedInput) + BigInt(output) * price(rate.output);
+  const amount = Number((total + 999_999n) / 1_000_000n);
   if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('费用超出可计量范围');
   return amount;
 }
