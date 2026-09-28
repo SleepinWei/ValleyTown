@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../engine/crypto';
 import type { Actor } from '../shared/types';
 import { dayOf } from '../shared/types';
 import type { PlanRequest, PlanningState } from '../shared/actions';

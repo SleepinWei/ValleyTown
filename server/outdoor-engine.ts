@@ -1,5 +1,5 @@
 import { completedAction } from './planning';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../engine/crypto';
 import type { World } from './world';
 import type { OutdoorKind } from '../shared/types';
 import { outdoorWeatherBlock, weatherInfo } from '../shared/weather';

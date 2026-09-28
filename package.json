@@ -7,20 +7,20 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "dev": "concurrently -k -n world,web \"node --watch --import tsx server/index.ts\" \"vite --host 127.0.0.1\"",
+    "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "start": "node --import tsx server/index.ts",
+    "start": "vite preview --host 127.0.0.1",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "smoke:models": "node --import tsx scripts/model-smoke.ts",
     "smoke:agent": "node --import tsx scripts/agent-smoke.ts",
-    "check:simulation": "node --import tsx scripts/simulation-check.ts"
+    "check:simulation": "node --import tsx scripts/simulation-check.ts",
+    "legacy:server": "node --import tsx server/index.ts",
+    "export:browser": "node --import tsx scripts/export-browser-save.ts"
   },
   "dependencies": {
-    "@fastify/static": "^8.3.0",
-    "@fastify/websocket": "^11.2.0",
-    "dotenv": "^17.2.0",
-    "fastify": "^5.6.0",
+    "@noble/hashes": "^2.4.0",
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -28,13 +28,18 @@
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@fastify/static": "^8.3.0",
+    "@fastify/websocket": "^11.2.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/three": "^0.186.0",
     "@types/ws": "^8.18.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "concurrently": "^9.2.0",
+    "dotenv": "^17.2.0",
+    "fake-indexeddb": "^6.2.5",
+    "fastify": "^5.6.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vite": "^7.1.0"

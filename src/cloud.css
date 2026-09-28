@@ -1,0 +1,12 @@
+.cloud-settings h3{display:flex;align-items:center;gap:8px}
+.cloud-status{display:flex;flex-direction:column;gap:6px;padding:14px 16px;margin:14px 0;border:1px solid var(--border,#dfe3d4);border-radius:10px;background:var(--surface-soft,#f3f4e9);overflow-wrap:anywhere}
+.cloud-status span,.cloud-status small{font-size:12px;color:var(--muted,#687860)}
+.cloud-auth{display:grid;gap:12px;margin:16px 0}
+.cloud-auth label{display:grid;gap:6px;font-size:13px;font-weight:600}
+.cloud-auth input{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;background:#fffef8;color:#314b38;border:1px solid #cdd6c3;border-radius:8px;font:inherit}
+.cloud-auth input:focus-visible{outline:2px solid #355b46;outline-offset:2px}
+.cloud-settings .button-row{flex-wrap:wrap;gap:8px;margin-top:12px}
+.cloud-settings button{min-height:40px}
+.cloud-settings button:disabled{opacity:.55;cursor:wait}
+.cloud-recovery{margin-top:18px;font-size:13px}
+.cloud-recovery summary{cursor:pointer;padding:8px 0}
