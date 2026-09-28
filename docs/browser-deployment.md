@@ -4,6 +4,13 @@
 
 溪谷镇的日常运行不再需要 Node / Fastify 服务。React 与 Three.js 在主线程呈现世界，Web Worker 执行模拟；IndexedDB 保存本机数据，Supabase 提供账号、云存档和模型代理。`npm run build` 生成的 `dist/` 就是完整前端。
 
+## 当前线上实例
+
+- 前端：[sleepinwei.github.io/ValleyTown](https://sleepinwei.github.io/ValleyTown/)（GitHub Pages，`main` 自动发布）。
+- Supabase 项目：`jbdaxgonrvflwiwlxegt`，东京区域。
+- 已配置站点回跳地址、公开连接参数和模型代理允许域名；模型调用仍需要供应商 Secrets 与账号额度。
+- 初始数据库通过 SQL Editor 执行仓库中的初始化 SQL，已实测账号写入、旧版本冲突和跨账号隔离。该实例尚未建立 Supabase CLI 迁移历史；以后使用 CLI 管理时，先核对结构并用迁移修复功能登记已执行的初始化，避免重复建表。
+
 ## 页面与模拟的生命周期
 
 - 打开页面，载入本机或账号存档，新旧世界都保持暂停；点击「开始生活 / 继续模拟」才推进。
