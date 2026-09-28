@@ -49,6 +49,9 @@ worker.onmessage=async({data:m})=>{
       initialize(validateTownData(m.data??local?.data??emptyTownData()));
       lifecycle.heartbeat(m.active===true,m.validForMs);await flush();snapshot();worker.postMessage({type:'ready'});return;
     }
+    // IndexedDB startup yields to the event loop. A heartbeat can arrive before
+    // init completes; it is not a world operation and must not abort startup.
+    if(m.type==='heartbeat'&&!world)return;
     if(!world)throw new Error('小镇尚未加载');
     if(m.type==='heartbeat'){lifecycle.heartbeat(m.active===true,m.validForMs);if(!m.active&&generation!==persisted){await flush();snapshot();}return;}
     if(m.type==='configure'){config=m.config??{};snapshot();return;}

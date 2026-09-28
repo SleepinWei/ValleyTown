@@ -7,7 +7,7 @@ export interface RuntimeInfo {email:string|null;configured:boolean;role:'viewer'
 export class RuntimeClient {
   info:RuntimeInfo={email:null,configured:cloudConfigured,role:'viewer',hosting:false,online:false,ready:false,dirty:false,syncing:false,lastSaved:null,error:'',conflict:false,models:{jev:false,deepseek:false}};
   private listeners=new Set<()=>void>();private snapshots?:{player:Snapshot;observer:Snapshot};
-  private startPromise?:Promise<void>;private worker?:Worker;private sequence=0;
+  private startPromise?:Promise<void>;private worker?:Worker;private workerReady=false;private sequence=0;
   private hostSession=crypto.randomUUID();private leaseDeadline=0;private viewRevision=-1;private hostRevision=0;
   private lastPublishAttempt=0;private pageOpen=true;
   private polling=false;private claiming=false;private stopping=false;
@@ -50,7 +50,7 @@ export class RuntimeClient {
     }catch(e){this.patch({error:(e as Error).message,ready:false});throw e;}
   }
   private pulse(){
-    if(!this.worker)return;
+    if(!this.worker||!this.workerReady)return;
     const remaining=cloud?this.leaseDeadline-performance.now():90000;
     const active=this.pageOpen&&remaining>0&&!this.stopping;
     this.worker.postMessage({type:'heartbeat',active,validForMs:Math.max(0,remaining)});
@@ -79,13 +79,14 @@ export class RuntimeClient {
     finally{this.claiming=false;}
   }
   private async boot(key:string,data?:TownData,revision?:number,shared=false){
+    this.workerReady=false;
     this.worker=new Worker(new URL('./worker.ts',import.meta.url),{type:'module'});
     const ready=new Promise<void>((resolve,reject)=>{
       const startup=setTimeout(()=>reject(new Error('浏览器世界启动超时')),30000);
       this.worker!.onerror=event=>{clearTimeout(startup);const error=new Error(event.message||'模拟线程停止');reject(error);void this.stopHosting(error.message);};
       this.worker!.onmessage=({data:m})=>{
         if(m.type==='pulse')this.pulse();
-        if(m.type==='ready'){clearTimeout(startup);resolve();}
+        if(m.type==='ready'){clearTimeout(startup);this.workerReady=true;this.pulse();resolve();}
         if(m.type==='snapshot'){this.snapshots=m.value;this.emit();}
         if(m.type==='error'){clearTimeout(startup);reject(new Error(m.error));void this.stopHosting(m.error);}
         if(m.type==='saved')this.patch({dirty:m.dirty,...!cloud?{lastSaved:m.updated}:{}});
@@ -96,7 +97,7 @@ export class RuntimeClient {
     this.worker.postMessage({type:'init',key,data,revision,shared,active:this.pageOpen,validForMs:cloud?Math.max(0,this.leaseDeadline-performance.now()):90000});await ready;
   }
   private stopWorker(){
-    this.worker?.terminate();this.worker=undefined;
+    this.workerReady=false;this.worker?.terminate();this.worker=undefined;
     for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new Error('模拟已停止'));}this.pending.clear();
     this.releaseLock?.();this.releaseLock=undefined;
   }
