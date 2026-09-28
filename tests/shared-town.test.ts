@@ -4,20 +4,42 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
 import {World} from '../server/world';
 import {BrowserStore} from '../engine/browser-store';
-import {publicTownSnapshot} from '../src/runtime/shared-view';
+import {publicTownSnapshot,readSharedView,playerPresentation} from '../src/runtime/shared-view';
+import {publishedTownView} from '../engine/published-view';
 const admin='00000000-0000-4000-8000-000000000001',viewer='00000000-0000-4000-8000-000000000002',other='00000000-0000-4000-8000-000000000003';
 const session='00000000-0000-4000-8000-000000000011',session2='00000000-0000-4000-8000-000000000012';
-test('public view excludes editable/private simulation data',()=>{
+test('shared presentation retains full gameplay but strips credentials and internal state',async()=>{
  const world=new World(new BrowserStore(),'demo');
- const view=publicTownSnapshot(world.snapshot(false));
- assert.equal(view.privateActors,undefined);assert.equal(view.actionTraces,undefined);assert.equal(view.observer,false);
- assert.deepEqual(view.conversations,[]);assert.deepEqual(view.usage.recent,[]);
- assert.ok(view.events.every(e=>e.audience.includes('public')));
- assert.equal(view.actors.length,24);assert.equal(JSON.stringify(view).includes(world.actor('gardener').secret.core),false);
+ const view=await publishedTownView(world);
+ assert.equal(view.observer,true);assert.equal(view.displayVersion,2);
+ assert.deepEqual(view.privateActors,world.snapshot(true).privateActors);
+ assert.deepEqual(view.decisions,world.snapshot(true).decisions);
+ assert.deepEqual(view.actionTraces,world.snapshot(true).actionTraces);
+ assert.equal(view.actors.length,24);
+ assert.ok(JSON.stringify(view).includes(world.actor('gardener').secret.core));
+ assert.deepEqual(playerPresentation(view).events,world.snapshot(false).events);
+ assert.equal(playerPresentation(view).privateActors,undefined);
+ for(const a of view.actors){
+  assert.equal((readSharedView(view,'GET',`/documents/${a.id}`) as any[]).length,4);
+  assert.equal((readSharedView(view,'GET',`/stories/${a.id}?view=observer`) as any).actorId,a.id);
+  assert.ok(readSharedView(view,'GET',`/action-policy/${a.id}`));
+ }
+ const dirty:any={...view,config:{deepseekKey:'provider-credential'},payload:{raw:'checkpoint'},auth:{email:'owner@example.com'},readViews:{...view.readViews,'/test':{api_key:'credential-a',access_token:'credential-b',service_role:'credential-c',secret_key:'credential-d',secret:{core:'fictional secret'},error:'raw provider response',text:'sk-fakecredentials123456 Bearer hiddenvalue123 eyJfake.payload.signature'}}};
+ const sanitized=publicTownSnapshot(dirty),encoded=JSON.stringify(sanitized);
+ for(const value of ['credential-a','credential-b','credential-c','credential-d','raw provider response','sk-fakecredentials123456','hiddenvalue123','eyJfake.payload.signature','checkpoint','owner@example.com'])assert.ok(!encoded.includes(value),value);
+ assert.ok(encoded.includes('fictional secret'));
+ assert.equal((sanitized as any).config,undefined);assert.equal((sanitized as any).payload,undefined);
+});
+test('viewer reads use isolated cached records and reject every mutation or non-view route',async()=>{
+ const view=await publishedTownView(new World(new BrowserStore(),'demo'));
+ const docs=readSharedView(view,'GET','/documents/gardener') as any[];docs[0].text='changed locally';
+ assert.notEqual((readSharedView(view,'GET','/documents/gardener') as any[])[0].text,docs[0].text);
+ for(const method of ['POST','PUT','PATCH','DELETE'])for(const path of ['/control','/commands','/documents','/stories/gardener?view=observer','/decision-lab','/decision-lab/stop','/saves','/saves/id/restore'])assert.throws(()=>readSharedView(view,method,path),/只读观看/);
+ for(const path of ['/model-proxy','/control','/documents/reload?x=1','/story-jobs/id','/stories/gardener?view=observer&generate=true'])assert.throws(()=>readSharedView(view,'GET',path),/只读观看/);
 });
 test('shared town roles, exclusive hosting, checkpoint privacy and paid access are enforced in Postgres',async t=>{
  const db=new PGlite();const store=new BrowserStore(),world=new World(store,'demo');world.persist();
- const snapshot=publicTownSnapshot(world.snapshot(false));
+ const snapshot=await publishedTownView(world);
  try{
  await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
  create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb);
@@ -53,11 +75,20 @@ test('shared town roles, exclusive hosting, checkpoint privacy and paid access a
   const ttl=(await db.query<{ttl:number}>('select extract(epoch from lease_until-now()) as ttl from public.shared_town')).rows[0].ttl;
   assert.ok(Number(ttl)>90,'Host lease must tolerate background timer throttling');
   await assert.rejects(db.query('select public.publish_town($1,0,$2,$3)',[session2,store.data,snapshot]),/town_host_lost/);
-  await assert.rejects(db.query('select public.publish_town($1,0,$2,$3)',[session,store.data,world.snapshot(true)]),/private_snapshot/);
-  assert.equal((await db.query<{revision:number}>('select public.publish_town($1,0,$2,$3) as revision',[session,store.data,snapshot])).rows[0].revision,1);
+  await assert.rejects(db.query('select public.publish_town($1,0,$2,$3)',[session,store.data,world.snapshot(true)]),/invalid_view_version/);
+  const bypass:any=structuredClone(snapshot);
+  bypass.config={apiKey:'root-credential'};bypass.payload={raw:'checkpoint'};
+  bypass.readViews['/security-test']={api_key:'nested-credential',service_role:'server-role',secret:{core:'fictional game secret'},error:'raw upstream error',text:'sk-fakecredentials123456 Bearer hiddenvalue123 eyJfake.payload.signature'};
+  assert.equal((await db.query<{revision:number}>('select public.publish_town($1,0,$2,$3) as revision',[session,store.data,bypass])).rows[0].revision,1);
   await assert.rejects(db.query('select public.publish_town($1,0,$2,$3)',[session,store.data,snapshot]),/save_conflict/);
   await db.exec('set role anon;');
   const watched=(await db.query<{view:any}>('select public.watch_town(0) as view')).rows[0].view;
+  assert.equal(watched.snapshot.observer,true);assert.equal(watched.snapshot.privateActors.length,24);
+  assert.equal(watched.snapshot.privateActors[0].secret.core,world.state.actors[0].secret.core);
+  const encoded=JSON.stringify(watched.snapshot);
+  for(const value of ['root-credential','nested-credential','server-role','checkpoint','raw upstream error','sk-fakecredentials123456','hiddenvalue123','eyJfake.payload.signature'])assert.ok(!encoded.includes(value),value);
+  assert.ok(encoded.includes('fictional game secret'));
+  await assert.rejects(db.query("select public.redact_town_presentation('{}')"),/permission denied/);
   assert.equal(watched.snapshot.id,world.state.id);assert.equal(watched.snapshot.clock,world.state.clock);assert.equal(watched.online,true);
   assert.equal((await db.query<{view:any}>('select public.watch_town(1) as view')).rows[0].view.snapshot,null);
  });

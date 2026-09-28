@@ -74,6 +74,8 @@ export interface SimulationTiming {
   targetMultiplier:number;actualMultiplier:number;gameMinutesPerSecond:number;waitingForApi:boolean;windowSeconds:number;
 }
 export interface Snapshot {
+  displayVersion?:number;readViews?:Record<string,unknown>;
+  playerView?:Pick<Snapshot,'events'|'conversations'|'appointments'|'bubbles'>;
   incidents: Pick<IncidentState, 'pace' | 'nextAt' | 'lastAt'>;
   timing:SimulationTiming;
   bubbles:SpeechBubble[];performance:{synchronization?:{reason:string;actors:string[]|null;waitMs:number}|null;lastSynchronization?:{reason:string;actors:string[]|null;waitMs:number};active:{action:number;dialogue:number;background:number};limits:{action:number;dialogue:number;background:number};lastFastContextTokens:number};

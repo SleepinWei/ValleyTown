@@ -4,6 +4,7 @@ import { BrowserStore, emptyTownData, validateTownData, type TownData } from '..
 import { createWorldRequests } from '../../engine/requests';
 import { openTownDatabase, readLocal, writeLocal } from './database';
 import { PageLifecycle } from './lifecycle';
+import { publishedTownView } from '../../engine/published-view';
 import type { ModelConfig } from '../../engine/ports';
 
 const worker=self as unknown as DedicatedWorkerGlobalScope;
@@ -63,7 +64,8 @@ worker.onmessage=async({data:m})=>{
       if(m.method==='POST'&&!(m.path==='/control'&&m.body?.action==='pause'))lifecycle.requireActive();
       result=await request(m.method,m.path,m.body);world.persist();await flush();snapshot();
     }else if(m.type==='export'){
-      world.persist();await flush();result={data:structuredClone(store.data),snapshot:world.snapshot(false),revision,generation};
+      const snapshot=await publishedTownView(world);world.persist();
+      result={data:structuredClone(store.data),snapshot,revision,generation};await flush();
     }else if(m.type==='synced'){
       revision=m.revision;if(generation===m.generation)dirty=false;await flush();result={ok:true};
     }else if(m.type==='suspend'){

@@ -60,3 +60,6 @@
 @media(max-width:640px){.world-toolbar{gap:8px;min-height:0;padding:10px 13px}.simulation-controls{width:100%;gap:8px;justify-content:space-between}.speed-control{display:flex;width:100%;order:3}.speed-actual>span:last-child{font-size:12px}.world-toolbar .model-badge{display:inline-flex}.speed-hint{font-size:12px}}
 
 .event-dot.incident{background:#b27d32}.event-row.incident-row p{color:#705324;font-weight:600}.incident-settings .outline{min-height:44px}.incident-settings .hint[role="status"]:empty{display:none}
+
+/* Fieldset keeps the settings layout identical while disabling host controls. */
+.readonly-settings { border: 0; margin: 0; padding: 0; min-width: 0; }

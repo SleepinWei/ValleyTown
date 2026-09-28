@@ -1,3 +1,4 @@
+import { useReadOnly, WriteButton } from './ReadOnly';
 import { runtime } from './runtime/client';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, ChevronDown, Download, RefreshCw, Sparkles } from 'lucide-react';
@@ -12,6 +13,7 @@ const date=(at:number)=>`第 ${dayOf(at)} 天 · ${timeOf(at)}`;
 const perspective=(r:StoryRecord)=>({event:'事件记录',experience:'亲身经历',belief:'个人认知 / 转述，未证实',reflection:'本人反思',commitment:'约定与回应'})[r.perspective];
 
 export function ActorStory({actorId,view}:{actorId:string;view:StoryView}){
+  const readOnly=useReadOnly();
   const [story,setStory]=useState<Story|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[starting,setStarting]=useState(false),[job,setJob]=useState<string|null>(null);
   const [expanded,setExpanded]=useState<Set<number>>(new Set()),[source,setSource]=useState<string[]|null>(null),[revision,setRevision]=useState(0);
   const evidenceRef=useRef<HTMLDivElement>(null);
@@ -40,8 +42,8 @@ export function ActorStory({actorId,view}:{actorId:string;view:StoryView}){
   const highlighted=story.narrative?.highlights.length?story.narrative.highlights.flatMap(h=>{const r=records.get(h.id);return r?[{record:r,reason:h.reason}]:[];}):story.highlights.map(record=>({record,reason:''}));
   return <section className="actor-story">
     <div className="story-cover"><span className="story-eyebrow">溪谷人物志 · {view==='observer'?'完整记录视角':'你所知道的故事'}</span><h3>{story.narrative?.title??`${story.name}，在溪谷的日子`}</h3><p>{story.role} · 截至{date(story.asOf)}</p><div className="story-stats"><span><b>{story.total}</b> 条记录</span><span><b>{story.days}</b> 个有故事的日子</span><span><b>{highlighted.length}</b> 个回看时刻</span></div></div>
-    <div className="story-toolbar"><button className="primary" disabled={busy||!story.canGenerate||!story.total} onClick={()=>void generate()}><Sparkles size={15}/>{busy?'正在写故事…':story.narrative?'重新整理叙事':'AI 写成故事'}</button><button className="outline" disabled={busy||loading} onClick={()=>{setSource(null);setRevision(v=>v+1);}}><RefreshCw size={14}/> 更新记录</button><button className="outline" onClick={download}><Download size={14}/> 导出</button></div>
-    <p className="story-note">{story.canGenerate?'AI 叙事使用 DeepSeek，计入 DeepSeek 人民币金额池；相同记录复用结果。':'当前为本地整理，可直接查看全时段故事；AI 叙事需真实模型模式并配置 DeepSeek。'}</p>
+    <div className="story-toolbar"><WriteButton className="primary" disabled={busy||!story.canGenerate||!story.total} onClick={()=>void generate()}><Sparkles size={15}/>{busy?'正在写故事…':story.narrative?'重新整理叙事':'AI 写成故事'}</WriteButton><button className="outline" disabled={busy||loading} onClick={()=>{setSource(null);setRevision(v=>v+1);}}><RefreshCw size={14}/> 更新记录</button><button className="outline" onClick={download}><Download size={14}/> 导出</button></div>
+    <p className="story-note">{readOnly?'只读查看已有故事与依据，不会调用模型；AI 整理仅限管理员。':story.canGenerate?'AI 叙事使用 DeepSeek，计入 DeepSeek 人民币金额池；相同记录复用结果。':'当前为本地整理，可直接查看全时段故事；AI 叙事需真实模型模式并配置 DeepSeek。'}</p>
     {busy&&<p className="story-progress" role="status">正在从整段时间线里寻找故事的脉络。关闭后仍会继续整理。</p>}
     {error&&<p className="story-error" role="alert">{error}</p>}
     <p className="story-coverage">{story.coverageNote}</p>

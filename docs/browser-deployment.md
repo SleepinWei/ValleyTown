@@ -10,13 +10,15 @@
 
 | 身份 | 可以做什么 |
 | --- | --- |
-| 未登录访客 | 查看地图、居民近况与公开事件，调整自己的镜头 |
+| 未登录访客 | 与管理员使用相同的观察界面：地图、记忆、秘密、关系、故事、文档、决策与实验记录；可切换视角与镜头 |
 | 普通账号 | 邮箱注册、验证与登录；同样只读观看 |
 | 管理员 | 点击「进入管理」，运行 / 暂停模拟，修改设置、编辑文档、导入导出与恢复存档 |
 
 管理员由部署者在数据库指定邮箱，必须完成 Supabase 邮箱验证。浏览器无法修改名单；`user_metadata`、自选用户名、注册先后顺序都不会授予管理权限。数据库 RPC 每次发布与取得运行权限时重新校验角色。模型代理也会检查管理员身份、当前运行权限及额度。
 
-完整世界（角色秘密、编辑文档、模型记录、备份）与公开画面分表保存。普通账号不能下载完整世界，不能发布状态，也不能调用旧版私人存档写入接口。观众只拿到公开角色信息与公开事件，不包含角色私有记忆、秘密、决策追踪或私密对话。
+可恢复的完整存档与只读展示资料分表保存。游客和普通账号可以查看角色的游戏记忆、虚构秘密、对话、故事、文档、决策与已有实验；不能修改世界、聊天、生成故事、启动实验或请求模型。详情直接读取已同步的资料，点击查看不会产生新的模型调用。完整存档、账号凭据、API 密钥、内部配置及原始诊断错误不对外发布；数据库在发布时还会再次过滤凭据。浏览器隐藏按钮之外，数据库权限与模型代理也会拒绝非管理员写入和付费调用。
+
+观看仍有正常的静态资源与 Supabase 数据流量；不新增模型调用不等于托管流量永远免费。
 
 ## 谁在运行模拟
 
@@ -157,6 +159,12 @@ npm test
 npm run build
 ```
 
-测试覆盖访客 / 普通账号 / 未验证管理员的权限、共享快照隐私、排他运行、版本冲突、租约失效、角色撤销和模型预算。线上真实邮件注册与真实模型请求仍需要用户自行完成账号验证与配置供应商 Secrets。
+测试覆盖访客 / 普通账号 / 未验证管理员的权限、完整只读视图、客户端与数据库凭据过滤、排他运行、版本冲突、租约失效、角色撤销和模型预算。线上真实邮件注册与真实模型请求仍需要用户自行完成账号验证与配置供应商 Secrets。
 
 数据库顾问会提示管理员名单 / 预算表没有客户端 RLS policy：这是有意拒绝所有客户端直读直写，仅由受保护函数访问。受保护的 SECURITY DEFINER RPC 具有固定 search_path 和明确身份检查。[RLS 检查说明](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) · [RPC 权限检查说明](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)。
+
+### 只读权限验证（2026-09-29）
+
+已验证匿名用户不能发布、调用内部过滤函数或读取完整存档；普通账号不能接管模拟、发布世界或预留模型费用。展示资料在浏览器导出和数据库发布两处过滤凭据，保留虚构游戏秘密。
+
+Supabase 安全检查中的管理员名单与费用表「RLS 无策略」是预期的默认拒绝；管理 RPC 的 SECURITY DEFINER 是为受控读写而保留，每次在函数内验证已确认邮箱的管理员身份与当前租约，普通用户拒绝测试已通过。参见 [RLS 提示](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)、[公开 RPC 提示](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)及[登录 RPC 提示](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)。账号服务仍提示未开启 [泄露密码检测](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)；本次没有调整账号策略或套餐。

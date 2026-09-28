@@ -1,7 +1,7 @@
 import type { Snapshot } from '../../shared/types';
 import { cloud, currentSession, cloudConfigured, isTownAdmin, claimTownHost, publishTown, releaseTownHost, watchTown, modelStatus, proxyModel } from './cloud';
 import { validateTownData, type TownData } from '../../engine/browser-store';
-import { publicTownSnapshot } from './shared-view';
+import { playerPresentation, readSharedView } from './shared-view';
 
 export interface RuntimeInfo {email:string|null;configured:boolean;role:'viewer'|'admin';hosting:boolean;online:boolean;ready:boolean;dirty:boolean;syncing:boolean;lastSaved:number|null;error:string;conflict:boolean;models:{jev:boolean;deepseek:boolean}}
 export class RuntimeClient {
@@ -60,7 +60,7 @@ export class RuntimeClient {
   private async poll(){
     if(this.polling||this.info.hosting)return;this.polling=true;
     try{const state=await watchTown(this.viewRevision);if(this.info.hosting)return;
-      if(state.snapshot){this.snapshots={player:state.snapshot,observer:state.snapshot};this.viewRevision=state.revision;}
+      if(state.snapshot){this.snapshots={player:playerPresentation(state.snapshot),observer:state.snapshot};this.viewRevision=state.revision;}
       this.patch({online:state.online,lastSaved:Date.parse(state.updated_at),error:'',ready:true});
     }catch(e){this.patch({online:false,error:'共享画面连接中断：'+(e as Error).message});}
     finally{this.polling=false;}
@@ -126,7 +126,9 @@ export class RuntimeClient {
   }
   private requireHost(){if(this.info.role!=='admin'||!this.info.hosting||this.stopping||(cloud&&performance.now()>=this.leaseDeadline))throw new Error('只有当前管理页面可以操作小镇');}
   async request<T>(path:string,body?:unknown,method=body===undefined?'GET':'POST'):Promise<T>{
-    await this.start();this.requireHost();const result=await this.rpc<T>('request',{path,body,method});
+    await this.start();
+    if(!this.info.hosting)return readSharedView(this.snapshots?.observer,method,path) as T;
+    this.requireHost();const result=await this.rpc<T>('request',{path,body,method});
     if(cloud&&method==='POST')await this.sync();return result;
   }
   async refreshModels(){
@@ -142,7 +144,7 @@ export class RuntimeClient {
   private async publish(){
     this.patch({syncing:true});const started=performance.now();this.lastPublishAttempt=started;
     try{const dump=await this.rpc<{data:TownData;snapshot:Snapshot;generation:number}>('export');
-      const revision=await publishTown(this.hostSession,this.hostRevision,dump.data,publicTownSnapshot(dump.snapshot));
+      const revision=await publishTown(this.hostSession,this.hostRevision,dump.data,dump.snapshot);
       this.hostRevision=revision;this.leaseDeadline=started+90000;
       await this.rpc('synced',{revision,generation:dump.generation});this.patch({error:'',lastSaved:Date.now(),online:true});
     }catch(e){this.worker?.postMessage({type:'heartbeat',active:false});this.leaseDeadline=0;this.patch({error:'共享同步失败，模拟已暂停：'+(e as Error).message,online:false});throw e;}
