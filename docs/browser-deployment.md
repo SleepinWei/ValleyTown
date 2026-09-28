@@ -123,6 +123,8 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_public_key
 | Netlify | `npm run build` | `dist` | 添加以上环境变量 |
 | GitHub Pages | `npm run build` | `dist` | 仓库子路径需设置 `VITE_BASE_PATH=/ValleyTown/`；通过 Actions 上传 `dist` |
 
+仓库已提供 [GitHub Pages 发布工作流](../.github/workflows/deploy-pages.yml)。在仓库 Settings → Pages 中选择 GitHub Actions，在 Settings → Secrets and variables → Actions → Variables 中设置 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_PUBLISHABLE_KEY`。推送 `main` 或手动运行工作流后，测试、构建与发布自动执行。工作流默认子路径为 `/ValleyTown/`。
+
 本项目没有服务端页面路由。修改 Vite 环境变量后需要重新构建。最终域名确定后同步更新 Supabase 的认证 URL 和 `ALLOWED_ORIGINS`。
 
 ## 存档与多设备
