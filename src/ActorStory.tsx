@@ -1,3 +1,4 @@
+import { runtime } from './runtime/client';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, ChevronDown, Download, RefreshCw, Sparkles } from 'lucide-react';
 import { dayOf, timeOf } from '../shared/types';
@@ -5,7 +6,7 @@ import type { ActorStory as Story, StoryJob, StoryRecord, StoryView } from '../s
 import './actor-story.css';
 
 async function request<T>(path:string,method='GET',signal?:AbortSignal):Promise<T>{
-  const r=await fetch(`/api${path}`,{method,signal});const result=await r.json();if(!r.ok)throw new Error(result.error??'无法读取故事');return result;
+  if(signal?.aborted)throw new DOMException('已取消','AbortError');const result=await runtime.request<T>(path,undefined,method);if(signal?.aborted)throw new DOMException('已取消','AbortError');return result;
 }
 const date=(at:number)=>`第 ${dayOf(at)} 天 · ${timeOf(at)}`;
 const perspective=(r:StoryRecord)=>({event:'事件记录',experience:'亲身经历',belief:'个人认知 / 转述，未证实',reflection:'本人反思',commitment:'约定与回应'})[r.perspective];

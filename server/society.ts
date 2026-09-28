@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../engine/crypto';
 import { dayOf, freeAdult, relation, type Actor, type Decision } from '../shared/types';
 import { distance, location, pathfind } from '../shared/map';
 import type { World } from './world';

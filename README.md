@@ -68,49 +68,47 @@
 
 ## 快速开始
 
-需要 **Node.js 22.13+**、npm，以及支持 WebGL 的现代浏览器。建议先用无需密钥、无模型费用的规则演示体验。
+需要 **Node.js 22.13+** 与 npm 进行构建，浏览器需要支持 WebGL、IndexedDB 和 Web Workers。无需启动独立后端。
 
 ```bash
 git clone https://github.com/SleepinWei/ValleyTown.git
 cd ValleyTown
 npm ci
+npm run dev
 ```
 
-首次安装时，将 [`.env.example`](.env.example) 复制为 `.env`，把其中一行改为：
+打开 Vite 输出的地址，点击「开始生活」。默认使用无密钥、无模型费用的**本机规则演示**。
 
-```dotenv
-MODEL_MODE=demo
-```
+**模拟跟着页面走：** 页面可见时才能推进；隐藏、关闭或刷新后暂停。返回后手动继续，不补算离线时间。同一个本机存档同时只允许一个标签页运行。
 
-其余配置保留默认值，两个 API 密钥可以留空；已有 `.env` 时直接编辑，不要覆盖。
+### 部署到静态托管 + Supabase
 
 ```bash
-npm run build
-npm start
+npm run build  # 生成 dist/，直接部署到 Vercel、Netlify 或 GitHub Pages
+npm start      # 本机预览静态产物，默认 http://127.0.0.1:4173
 ```
 
-打开 **[127.0.0.1:3001](http://127.0.0.1:3001)**，点击「开始生活」。新世界默认暂停。
-
-> **两种运行方式：** `demo` 使用本地规则，界面标注「非模型」；`live` 调用 Jev 与 DeepSeek，需要相应密钥和网络连接。已有存档会保留运行模式；切换时请暂停，等待在途请求结束，再到「设置」修改。
-
-<details>
-<summary><strong>接入真实模型</strong></summary>
-
-在 `.env` 中填写：
+连接 Supabase 时，前端只配置以下公钥信息：
 
 ```dotenv
-MODEL_MODE=live
-DEEPSEEK_API_KEY=你的_DeepSeek_密钥
-VALLEYTOWN_JEV_API_KEY=你的_Jev_密钥
-DEEPSEEK_BUDGET_CNY=10
-JEV_BUDGET_CNY=10
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_public_key
 ```
 
-重启服务；如果已有演示存档，再在「设置」中切换为真实模型。密钥仅由后端读取。
+Supabase 保存账号隔离的云存档，通过 Edge Functions 代理 Jev 与 DeepSeek。供应商密钥保留在云端 Secrets；访问权限与硬额度由部署者授予，浏览器不能提高云端额度。未配置 Supabase 也可以完整体验本机规则模拟。
 
-DeepSeek 与 Jev 使用独立的人民币金额池，默认各 ¥10；任一池不足以预留下次请求时，全局暂停。费用按本地单价估算，以供应商账单为准，详见[预算说明](docs/money-budgets.md)。真实模型模式下，筛选后的角色上下文会发送给相应供应商；本地存储不等于离线推理。
+**[完整部署指南：数据库迁移、模型代理、额度与前端托管 →](docs/browser-deployment.md)**
 
-阶段规划与对白表达使用 DeepSeek `deepseek-flash`，高频行动判断使用 Jev `jev-1.13.0`。日终默认摘录真实经历；可通过 `DEEPSEEK_REFLECTION=true` 启用模型反思。
+<details>
+<summary><strong>已有本地 SQLite 存档？</strong></summary>
+
+停止旧 Node 服务并备份 `data/` 后，执行：
+
+```bash
+npm run export:browser -- ./data ./output/valleytown-browser-save.json
+```
+
+然后在网页「设置 → 导入备份」载入。导出只读原数据库，保留居民、记忆、文档和本地账本；详情见[迁移说明](docs/browser-deployment.md#迁移旧-sqlite-存档)。
 
 </details>
 
@@ -143,8 +141,9 @@ flowchart LR
 | 层次 | 实现与边界 |
 | --- | --- |
 | 世界呈现 | React 19 + Three.js；HD-2D 场景、天气、角色与头顶对白。 |
-| 模拟与执行 | Fastify + Node `worker_threads`；寻路、时间、库存、关系和模型任务在独立模拟线程运行。 |
-| 记忆与存档 | SQLite 保存运行状态，Markdown 提供人设编辑与可读记忆投影。 |
+| 模拟与执行 | 浏览器 Web Worker；寻路、时间、库存、关系和模型任务独立于渲染线程运行。 |
+| 记忆与存档 | IndexedDB 保存本机状态，Supabase 按账号同步存档；文档在网页编辑，故事可导出 Markdown。 |
+| 模型代理 | Supabase Edge Functions 验证身份、限制模型与额度，再调用供应商。 |
 | 上下文隔离 | 每位居民保有独立上下文；听闻是个人认知，秘密按条件解锁。 |
 | 可观察性 | 行动候选、实际选择、概率、调用耗时和费用账本可查；概率不等于正确率。 |
 
@@ -154,6 +153,7 @@ flowchart LR
 
 | 想了解什么 | 从这里开始 |
 | --- | --- |
+| 部署、账号、云存档与旧数据迁移 | [静态前端 + Supabase](docs/browser-deployment.md) |
 | 操作、存档、记忆编辑、暂停与重启 | [完整使用指南](docs/guide.md) |
 | 地图、户外活动、光影与天气 | [世界扩建](docs/world-expansion.md) · [天气与渲染](docs/weather-and-rendering.md) |
 | 故事、家庭与生活事件 | [人物故事](docs/character-stories.md) · [家庭与司法](docs/families-justice-workers.md) · [生活事件](docs/demo-incidents.md) |
@@ -162,7 +162,7 @@ flowchart LR
 | 参与开发或报告问题 | [贡献指南](CONTRIBUTING.md) · [提交反馈](https://github.com/SleepinWei/ValleyTown/issues/new/choose) |
 
 ```bash
-npm run dev              # 后端 + Vite 开发服务器，打开 Vite 显示的地址
+npm run dev              # 仅启动 Vite；模拟在浏览器中运行
 npm test                 # 核心规则、记忆隔离、预算、暂停与 API 检查
 npm run build            # TypeScript 检查与生产构建
 npm run check:simulation # 临时规则世界运行三个游戏日，无模型费用
@@ -172,9 +172,9 @@ npm run check:simulation # 临时规则世界运行三个游戏日，无模型�
 
 ## 当前范围
 
-溪谷镇目前是持续迭代的本地单机原型，聚焦可玩的 Agent 社交与观察体验。建筑提供门前交互，尚无独立室内地图、完整种植季节系统或战斗；长期社交平衡与持续真实模型运行仍需校准。
+溪谷镇目前是持续迭代的浏览器模拟原型，聚焦可玩的 Agent 社交与观察体验。建筑提供门前交互，尚无独立室内地图、完整种植季节系统或战斗；长期社交平衡与持续真实模型运行仍需校准。
 
-服务仅绑定 `127.0.0.1`。「自由游玩」与「观察者」是本地管理员的视角选择，不是多用户权限系统。后端运行时世界可以继续生活；停止后不会补算离线时间。备份 `data/` 前请先停止服务。
+每个账号有独立的云存档；「自由游玩」与「观察者」是在自己的世界里切换视角。模型模式会将筛选后的角色上下文发送到供应商。页面隐藏或关闭后停止推进；跨设备前请同步，清理浏览器数据前请导出备份。
 
 仓库暂未指定开源许可证。
 

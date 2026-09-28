@@ -5,18 +5,16 @@ import { actionRegistry, buildActions, validateAction, beginLocalAction, advance
 import { planning, planIssue, replanEligibility, requestPlan, failPlan, failedAction, planningPolicy, reusablePlan, planningNeedsReview } from './planning';
 import type { ActionCandidate } from '../shared/actions';
 import type { ActionTrace } from '../shared/telemetry';
-import { captureAttempts } from './telemetry';
 import { DecisionLab } from './decision-lab';
 import { fastContext, realtimeLimits } from './realtime';
 import { advanceSociety, canMarry, canHaveChild, considerFamily, commitFamily, canMurder, commitMurder, random } from './society';
 import { freeAdult } from '../shared/types';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../engine/crypto';
 import { Actor, OutdoorKind, Conversation, Decision, Mode, PendingSpeech, Relation, Snapshot, WorldState, clamp, dayOf, relation, timeOf } from '../shared/types';
 import { distance, items, location, locations, pathfind, regionAt } from '../shared/map';
 import { createWorld } from './seed';
-import { Store, BudgetError } from './store';
-import { ModelGateway, Question, JevResult, estimateTokens } from './models';
-import { Documents } from './documents';
+import { BudgetError, type WorldStore, type ModelPort, type DocumentPort } from '../engine/ports';
+import { type Question, type JevResult, estimateTokens } from '../engine/model-gateway';
 import { migrateWorld } from './migrations';
 import { outdoorActivities, outdoorInterests } from '../shared/outdoors';
 import { environmentContext, outdoorWeatherBlock, weatherAt, weatherInfo, weatherSlot } from '../shared/weather';
@@ -35,7 +33,7 @@ const friendlyError=(error:unknown)=>error instanceof Error?error.message.slice(
 type Candidate=ActionCandidate;
 export class World {
   readonly simulationRate=new SimulationRate();
-  stories:StoryService; state:WorldState; gateway:ModelGateway; documents:Documents; lab:DecisionLab; private readyAt=new Map<string,number>();
+  stories:StoryService; state:WorldState; gateway:ModelPort; documents:DocumentPort; lab:DecisionLab; private readyAt=new Map<string,number>();
   lanes={action:0,dialogue:0,background:0}; private backgroundActors=new Set<string>(); private backgroundRetry=new Map<string,number>(); private fastReady=new Map<string,number>(); private elapsed=0;
   get active(){return this.lanes.action+this.lanes.dialogue+this.lanes.background+(this.lab?.active?1:0)+(this.stories?.active?1:0);}
   private syncing:{at:number;actors:string[]|null;reason:string;startedAt:number}|null=null;
@@ -67,20 +65,20 @@ export class World {
   }
   private lastFastContextTokens=0; private playerTalkIdle=new Map<string,number>(); lastSave=Date.now(); lastDocs=Date.now();
   onChange=()=>{}; private decisionCursor=0;
-  constructor(public store:Store, mode:Mode='demo',gateway?:ModelGateway){
+  constructor(public store:WorldStore, mode:Mode='demo',gateway?:ModelPort){
     const existing=store.load();if(existing?.laboratoryRun){existing.status='paused_manual';delete existing.laboratoryRun;}if(existing&&existing.version<3)store.archive(existing,'家庭与司法扩展前 · 自动备份');this.state=migrateWorld(existing??createWorld(mode));this.state.pending??=[];
     if(existing){
       for(const a of this.state.actors){a.busy=false;a.path??=[];}
       for(const c of this.state.conversations){c.pending=false;if(c.participants.includes('player'))this.endConversation(c.id);}
     }
     for(const a of this.state.actors){const p=planning(a,this.state.clock);if(p.request&&!this.state.pending.some(r=>r.kind==='plan'&&r.data.requestId===p.request?.id)&&(p.inFlight||p.request.attempts>=planningPolicy.maxAttempts))failPlan(a,this.state.clock,p.request.id,'上次规划请求中断');p.inFlight=null;a.localTask??=null;}
-    this.gateway=gateway??new ModelGateway(store,()=>isRunning(this.state),()=>this.pause('paused_budget_limit'));
+    this.gateway=gateway??store.createGateway(()=>isRunning(this.state),()=>this.pause('paused_budget_limit'));
     this.lab=new DecisionLab(this);
     for(const a of this.state.actors)a.storyHistoryStart??=existing?this.state.clock:(a.life.bornAt??480);
     this.stories=new StoryService(this);
     const pendingIds=new Set(this.state.pending.filter(p=>p.kind==='action').map(p=>p.data.trace?.id));
     for(const trace of this.store.traces(1000))if(['requesting','deferred'].includes(trace.status)&&!pendingIds.has(trace.id)){trace.status='interrupted';trace.reason='进程中断；无法确认最终执行结果';this.store.putTrace(trace);}
-    this.documents=new Documents(store,()=>this.state,(a,kind,body)=>{
+    this.documents=store.createDocuments(()=>this.state,(a,kind,body)=>{
       a.revision++;if(kind==='notes')a.longTermNotes=body;if(kind==='today')a.dailyNotes={day:dayOf(this.state.clock),text:body};if(kind==='persona')a.persona=body;if(kind==='secret')a.secret.core=body,a.secret.fragments[2]=body;
       this.memory(a,`管理员修改了${kind==='persona'?'人设':kind==='secret'?'私有秘密':kind==='today'?'当日记忆':'长期设定'}：${body}`,'editor',true,'editor');
       planning(a,this.state.clock).contextVersion++;planIssue(a,this.state.clock,'document','本人设定或记忆文档发生变化');a.decisionReason='本人文档更新';
@@ -114,8 +112,8 @@ export class World {
     const answer=result.answers.action??result.answers.intent??Object.values(result.answers)[0];return {id:randomUUID(),time:new Date().toISOString(),actorId:a.id,source:result.model,action,choices:answer.probabilities??{},confidence:answer.confidence??null,latency:result.latency,input:result.input,output:result.output,evidence:a.memories.slice(-5).map(m=>m.id),explanation:`系统记录：${purpose}；选择「${action}」。上下文只包含本人的当日经历、长期记忆与私人设定。`};
   }
   record(d:Decision){this.state.decisions.unshift(d);this.state.decisions=this.state.decisions.slice(0,120);}
-  async evaluate(a:Actor,state:unknown,questions:Record<string,Question>,purpose:string,preferred?:string):Promise<JevResult>{
-    if(this.state.mode==='live')return this.gateway.jev(state,questions,purpose);
+  async evaluate(a:Actor,state:unknown,questions:Record<string,Question>,purpose:string,preferred?:string,attempts?:import('../shared/types').CallRecord[]):Promise<JevResult>{
+    if(this.state.mode==='live')return this.gateway.jev(state,questions,purpose,attempts);
     const answers:Record<string,any>={};
     for(const [id,q]of Object.entries(questions)){
       if(q.type==='choice'){const options=Object.keys(q.criteria);const index=(Math.floor(this.state.clock/30)+a.id.length+this.state.events.length)%options.length;const choice=preferred&&preferred in q.criteria?preferred:options[index];answers[id]={type:'choice',choice,probabilities:Object.fromEntries(options.map(k=>[k,k===choice?1:0])),confidence:1};}
@@ -298,7 +296,7 @@ export class World {
 
   async reflect(a:Actor,day:number){
     const revision=a.revision,memories=a.memories.filter(m=>m.day===day&&m.kind!=='reflection'&&m.kind!=='editor');
-    const useModel=this.state.mode==='live'&&process.env.DEEPSEEK_REFLECTION==='true';
+    const useModel=this.state.mode==='live'&&this.store.reflectionEnabled;
     const text=useModel?(await this.gateway.text('根据居民当天实际记忆写不超过150字的第一人称反思。区分亲历、转述与猜测，不创造新事实或新秘密。',{name:a.name,actorId:a.id,memories},'reflection',768)).text:`第 ${day} 天的实际经历摘录：${memories.filter(m=>m.kind==='experience'||m.kind==='commitment').slice(-5).map(m=>m.text).join('；')||'没有记录到新的亲历事件。'}`;
     this.deferred('reflection',a,revision,{text,day,source:useModel?'DeepSeek 日终反思':'本地日终摘录'});
   }
@@ -317,7 +315,7 @@ export class World {
     const startedAt=Date.now();const trace:ActionTrace={id:randomUUID(),worldId:this.state.id,actorId:a.id,source:this.state.mode==='live'?'Jev':'规则演示（非 Jev）',mode:this.state.mode,queuedAt,startedAt,queueMs:startedAt-queuedAt,modelMs:0,status:'requesting',candidateCategories:Object.fromEntries(Object.entries(candidates).map(([k,c])=>[k,c.category!])),candidates:Object.fromEntries(Object.entries(candidates).map(([k,c])=>[k,c.label])),facts:{weather:this.state.weather,energy:Math.round(a.energy),plan:a.plan,region:context.region,trigger:a.decisionReason??'当前行动完成或等待到期'},probabilities:{},events:[],attempts:[]};
     this.store.putTrace(trace);
     try{
-      const result=await captureAttempts(trace.attempts,()=>this.evaluate(a,context,questions,'action',preferred));
+      const result=await this.evaluate(a,context,questions,'action',preferred,trace.attempts);
       trace.finishedAt=Date.now();trace.modelMs=trace.finishedAt-startedAt;trace.source=result.model;
       const answer=result.answers.action;const effective=answer.confidence!<0.22?'wait':answer.choice!;
       trace.selected=answer.choice;trace.probabilities=answer.probabilities??{};trace.confidence=answer.confidence;

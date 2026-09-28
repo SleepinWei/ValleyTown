@@ -1,0 +1,6 @@
+project_id = "valleytown"
+
+[functions.model-proxy]
+# The handler calls auth.getUser(jwt) before every action, supporting current signing keys
+# as well as legacy JWTs. Anonymous/publishable keys alone never authorize a model call.
+verify_jwt = false

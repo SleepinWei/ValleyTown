@@ -1,9 +1,10 @@
+import { api } from './runtime/client';
 import { useEffect, useState } from 'react';
 import { actionCategoryNames, type ActionCategory, type ActionPolicyView } from '../shared/actions';
 import { timeOf } from '../shared/types';
 export function ActionPolicy({actorId}:{actorId:string}){
  const [data,setData]=useState<ActionPolicyView|null>(null),[error,setError]=useState('');
- useEffect(()=>{let ended=false,busy=false;setData(null);setError('');const refresh=async()=>{if(busy)return;busy=true;try{const r=await fetch(`/api/action-policy/${encodeURIComponent(actorId)}`),value=await r.json();if(!r.ok)throw new Error(value.error);if(!ended){setData(value);setError('');}}catch(e){if(!ended)setError((e as Error).message);}finally{busy=false;}};void refresh();const timer=setInterval(()=>void refresh(),1500);return()=>{ended=true;clearInterval(timer);};},[actorId]);
+ useEffect(()=>{let ended=false,busy=false;setData(null);setError('');const refresh=async()=>{if(busy)return;busy=true;try{const value=await api<ActionPolicyView>(`/action-policy/${encodeURIComponent(actorId)}`);if(!ended){setData(value);setError('');}}catch(e){if(!ended)setError((e as Error).message);}finally{busy=false;}};void refresh();const timer=setInterval(()=>void refresh(),1500);return()=>{ended=true;clearInterval(timer);};},[actorId]);
  if(!data)return <p role="status">{error||'正在读取动作与规划策略…'}</p>;
  const p=data.planning;
  return <section className="action-policy">

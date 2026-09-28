@@ -1,14 +1,14 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { hash as hashText, randomUUID } from '../engine/crypto';
 import type { World } from './world';
 import { freeAdult, relation } from '../shared/types';
 import { environmentContext } from '../shared/weather';
 import { distance } from '../shared/map';
 import { fastContext } from './realtime';
-import { ModelGateway, type Question } from './models';
-import { captureAttempts } from './telemetry';
+import type { ModelPort as ModelGateway } from '../engine/ports';
+import type { Question } from '../engine/model-gateway';
 import type { LabRun, LabScenario, LabSample } from '../shared/telemetry';
 
-const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const hash=(value:unknown)=>hashText(JSON.stringify(value));
 export function scenarioInputs(world:World,actorId:string,scenario:LabScenario):LabRun['inputs']{
   const state=structuredClone(world.state),a=state.actors.find(a=>a.id===actorId);
   if(!a||!freeAdult(a))throw new Error('请选择一位可自由行动的成年居民');
@@ -42,7 +42,7 @@ export function syntheticInputs(scenario:LabScenario):LabRun['inputs']{
 export class DecisionLab {
   active=false;current?:LabRun;gateway:ModelGateway;settled:Promise<void>=Promise.resolve();
   constructor(private world:World){
-    this.gateway=new ModelGateway(world.store,()=>this.active&&this.current?.status==='running'&&world.state.status==='running_live',()=>world.pause('paused_budget_limit'));
+    this.gateway=world.store.createGateway(()=>this.active&&this.current?.status==='running'&&world.state.status==='running_live',()=>world.pause('paused_budget_limit'));
     for(const run of world.store.labs(100))if(run.status==='running'||run.status==='stopping'){
       run.status='interrupted';run.finished=Date.now();for(const s of run.samples)if(s.status==='queued'||s.status==='running')s.status='interrupted';world.store.putLab(run);
     }
@@ -75,10 +75,10 @@ export class DecisionLab {
         const input=run.inputs[sample.variant],question:Extract<Question,{type:'choice'}>={type:'choice',instructions:input.instructions,criteria:input.candidates};
         sample.startedAt=Date.now();sample.queueMs=sample.startedAt-sample.queuedAt;sample.status='running';this.world.store.putLab(run);
         try{
-          await captureAttempts(sample.attempts,async()=>{
-            if(provider==='Jev'){const r=await this.gateway.jev(input.state,{action:question},'benchmark-action');sample.choice=r.answers.action.choice;sample.probabilities=r.answers.action.probabilities;}
-            else sample.choice=(await this.gateway.chooseText(input.state,question)).choice;
-          });
+          await (async()=>{
+            if(provider==='Jev'){const r=await this.gateway.jev(input.state,{action:question},'benchmark-action',sample.attempts);sample.choice=r.answers.action.choice;sample.probabilities=r.answers.action.probabilities;}
+            else sample.choice=(await this.gateway.chooseText(input.state,question,'benchmark-action',sample.attempts)).choice;
+          })();
           sample.status='complete';
         }catch(error){sample.status='failed';sample.error=(error as Error).message.slice(0,180);}
         sample.finishedAt=Date.now();sample.modelMs=sample.finishedAt-sample.startedAt;sample.totalMs=sample.finishedAt-sample.queuedAt;this.world.store.putLab(run);this.world.onChange();

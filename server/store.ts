@@ -7,8 +7,15 @@ import { randomUUID } from 'node:crypto';
 import type { ActionTrace, LabRun } from '../shared/telemetry';
 import type { WorldState, Usage, CallRecord, TownEvent } from '../shared/types';
 
-export class BudgetError extends Error { constructor(public provider?:BudgetProvider){super(`${provider??'模型'} 金额池额度不足，模拟已暂停`);} }
+import { BudgetError, type DocumentChanged } from '../engine/ports';
+import { Documents } from './documents';
+import { ModelGateway } from './models';
+export { BudgetError } from '../engine/ports';
 export class Store {
+  get reflectionEnabled(){return process.env.DEEPSEEK_REFLECTION==='true';}
+  createGateway(canRun:()=>boolean,onBudget:()=>void){return new ModelGateway(this,canRun,onBudget);}
+  createDocuments(world:()=>WorldState,changed:DocumentChanged){return new Documents(this,world,changed);}
+  callSummary(){return this.db.prepare("SELECT purpose,COUNT(*) AS calls,SUM(input) AS input,SUM(output) AS output FROM calls WHERE provider='DeepSeek' GROUP BY purpose").all() as {purpose:string;calls:number;input:number;output:number}[];}
   db: DatabaseSync;
   private usageCache?:Usage;
   private usageDataVersion=-1;
@@ -73,7 +80,7 @@ export class Store {
     }catch(e){this.db.exec('ROLLBACK');throw e;}
   }
   archive(world:WorldState,label:string) {const id=randomUUID();this.db.prepare('INSERT INTO saves VALUES (?,?,?,?)').run(id,label,Date.now(),JSON.stringify(world));return id;}
-  saves(){return this.db.prepare('SELECT id,label,created FROM saves ORDER BY created DESC LIMIT 30').all();}
+  saves(){return this.db.prepare('SELECT id,label,created FROM saves ORDER BY created DESC LIMIT 30').all() as {id:string;label:string;created:number}[];}
   restore(id:string):WorldState {const r=this.db.prepare('SELECT json FROM saves WHERE id=?').get(id) as {json:string}|undefined;if(!r)throw new Error('存档不存在');return JSON.parse(r.json);}
   private provider(value:string):BudgetProvider {if(!budgetProviders.includes(value as BudgetProvider))throw new Error('未知模型供应商');return value as BudgetProvider;}
   private validateExchange(value:number){if(!Number.isFinite(value)||value<=0||value>100)throw new Error('请输入有效的美元兑人民币汇率（0–100）');}

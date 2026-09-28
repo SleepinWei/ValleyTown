@@ -8,7 +8,7 @@ import './decision-lab.css';
 const ms=(n:number|null|undefined)=>n==null?'—':`${(n/1000).toFixed(2)} s`;
 const statusText:Record<ActionTrace['status'],string>={requesting:'请求中',deferred:'暂停暂存',applied:'已交给游戏执行',overridden:'规则替换后执行',rejected:'执行被拒绝',failed:'模型请求失败',interrupted:'进程中断 · 待核对'};
 const scenarios:Record<LabScenario,string>={baseline:'相同情境 · 检查波动',rain:'晴天 → 雷雨',tired:'精力 75 → 12',enemy:'普通邻居 → 高怨恨',lover:'普通邻居 → 亲密关系与邀请'};
-async function api<T>(path:string,body?:unknown):Promise<T>{const r=await fetch(`/api${path}`,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.error??'请求失败');return data;}
+import { api } from './runtime/client';
 
 export function TraceDetail({trace}:{trace:ActionTrace}){
   const attempts=trace.attempts,requestMs=attempts.reduce((n,a)=>n+a.latency,0),tokens=attempts.reduce((n,a)=>n+a.input+a.output,0);
