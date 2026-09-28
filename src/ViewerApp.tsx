@@ -22,7 +22,7 @@ export function ViewerApp(){
       <div className="header-right">{info.role==='admin'&&<button className="primary" disabled={busy||!info.ready} onClick={()=>void takeControl()}><Shield size={15}/>{busy?'正在连接…':'进入管理'}</button>}<button className="outline" onClick={()=>setAccount(true)}>{info.email?'我的账号':'登录 / 注册'}</button></div>
     </header>
     <div className="world-toolbar"><div className="season"><div className="season-icon"><Leaf size={21}/></div><div><strong>{world?`春 · 第 ${dayOf(world.clock)} 天`:'溪谷镇直播间'}</strong><small>所有人观看同一份世界</small></div>{world&&<><span className="divider"/><span className="world-time"><Clock3 size={17}/>{timeOf(world.clock)}</span><span className="weather">{world.weather}</span></>}</div>
-      <span className={`connection ${info.online?'online':''}`}><i/>{info.error?'连接中断 · 保留最后画面':info.online?(world?.status==='running_live'?'管理员正在运行':'管理员在线 · 已暂停'):'管理员离线 · 小镇已暂停'}</span>
+      <span className={`connection ${info.online?'online':''}`}><i/>{info.error?'连接中断 · 保留最后画面':info.online?(world?.status==='running_live'?'模拟正在运行':'模拟连接正常 · 已暂停'):'模拟已暂停 · 等待管理页面连接'}</span>
     </div>
     {(message||info.error)&&<p className="viewer-notice" role="alert">{message||info.error}</p>}
     {world?<main className="workspace viewer-workspace">

@@ -50,6 +50,8 @@ test('shared town roles, exclusive hosting, checkpoint privacy and paid access a
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
   const current=(await db.query<{host_session:string}>('select host_session from public.shared_town')).rows[0].host_session;
   assert.equal(current,session);
+  const ttl=(await db.query<{ttl:number}>('select extract(epoch from lease_until-now()) as ttl from public.shared_town')).rows[0].ttl;
+  assert.ok(Number(ttl)>90,'Host lease must tolerate background timer throttling');
   await assert.rejects(db.query('select public.publish_town($1,0,$2,$3)',[session2,store.data,snapshot]),/town_host_lost/);
   await assert.rejects(db.query('select public.publish_town($1,0,$2,$3)',[session,store.data,world.snapshot(true)]),/private_snapshot/);
   assert.equal((await db.query<{revision:number}>('select public.publish_town($1,0,$2,$3) as revision',[session,store.data,snapshot])).rows[0].revision,1);

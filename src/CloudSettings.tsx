@@ -14,7 +14,7 @@ export function CloudSettings(){
   return <section className="settings-section cloud-settings" aria-label="共享小镇与账号">
     <h3>{info.role==='admin'?<Shield size={18}/>:<Eye size={18}/>} {info.role==='admin'?'管理员账号':'观看账号'}</h3>
     <p className="muted">所有人观看同一个小镇。只有管理员可以运行模拟、修改设置和编辑世界。</p>
-    <div className="cloud-status"><strong>{info.email??(cloud?'访客 · 无需登录即可观看':'本地演示')}</strong><span>{info.hosting?'当前页面正在管理小镇':info.online?'已连接共享画面':'管理员离线，小镇保持最后状态'}</span>{info.lastSaved&&<small>最近保存 {new Date(info.lastSaved).toLocaleTimeString()}</small>}</div>
+    <div className="cloud-status"><strong>{(info.email?`已登录 · ${info.email}`:null)??(cloud?'访客 · 无需登录即可观看':'本地演示')}</strong><span>{info.hosting?'当前页面正在管理小镇':info.online?'已连接共享画面':'模拟连接未开启，小镇保持最后状态'}</span>{info.lastSaved&&<small>最近保存 {new Date(info.lastSaved).toLocaleTimeString()}</small>}</div>
     {info.error&&<p className="warning" role="alert">{info.error}</p>}
     {info.email?<div className="button-row">
       {info.hosting&&<><button disabled={busy||info.syncing} className="outline" onClick={()=>void run(()=>runtime.sync())}><Cloud size={14}/> 发布并保存</button><button disabled={busy} className="outline" onClick={()=>void run(()=>runtime.refreshModels())}><RefreshCw size={14}/> 检查模型连接</button><button disabled={busy} className="outline" onClick={()=>void run(()=>runtime.stopHosting())}><Eye size={14}/> 停止管理并观看</button></>}
@@ -25,7 +25,7 @@ export function CloudSettings(){
       <div className="button-row"><button className="primary" disabled={busy}>登录</button><button type="button" className="outline" disabled={busy||!email||password.length<8} onClick={()=>void run(signup)}>创建账号</button></div>
       <p className="hint">新账号默认为观看权限。管理员由部署者指定，并须完成邮箱验证；注册不会生成新的小镇。</p>
     </form>:<p className="hint">本地演示未连接 Supabase。线上共享站点需要配置公开连接参数。</p>}
-    {info.hosting&&<><div className="button-row"><button className="outline" disabled={busy} onClick={()=>void run(()=>runtime.download())}><Download size={14}/> 导出备份</button><button className="outline" disabled={busy} onClick={()=>file.current?.click()}><Upload size={14}/> 导入备份</button><input ref={file} type="file" accept="application/json,.json" className="sr-only" aria-label="选择小镇备份" onChange={e=>{const f=e.target.files?.[0];if(f)void run(async()=>{await runtime.importFile(f);setMessage('备份已导入并发布，小镇保持暂停。');});e.target.value='';}}/></div><p className="hint">共享世界每 3 秒发布并保存。管理员隐藏或关闭页面后暂停，观众可继续查看最后画面。网络中断会停止模拟，重新接管以云端存档为准。</p></>}
+    {info.hosting&&<><div className="button-row"><button className="outline" disabled={busy} onClick={()=>void run(()=>runtime.download())}><Download size={14}/> 导出备份</button><button className="outline" disabled={busy} onClick={()=>file.current?.click()}><Upload size={14}/> 导入备份</button><input ref={file} type="file" accept="application/json,.json" className="sr-only" aria-label="选择小镇备份" onChange={e=>{const f=e.target.files?.[0];if(f)void run(async()=>{await runtime.importFile(f);setMessage('备份已导入并发布，小镇保持暂停。');});e.target.value='';}}/></div><p className="hint">共享世界每 3 秒发布并保存。切换标签页保持登录与模拟运行。退出账号或关闭管理页面后停止模拟；浏览器休眠或网络中断时可能暂停，账号仍保持登录。</p></>}
     {message&&<p role="status" className="hint">{message}</p>}
   </section>;
 }

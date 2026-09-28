@@ -21,13 +21,21 @@ test('browser world retains real gameplay, stories, privacy and independently ve
   const story=await request('GET','/stories/gardener?view=observer') as any;assert.equal(story.name,'许棠');
   const reloaded=new World(new BrowserStore(validateTownData(store.data)),'demo');assert.equal(reloaded.actor('gardener').persona,'喜欢花与清晨。');
 });
-test('visible-page lifecycle pauses on hiding, lost heartbeat and return; no offline catch-up',()=>{
+test('background host heartbeats keep running; expired leases and browser sleep pause without catch-up',()=>{
   const {world}=fixture();let now=100;const lifecycle=new PageLifecycle(world,()=>now);
-  assert.throws(()=>lifecycle.requireVisible(),/可见/);
-  lifecycle.heartbeat(true);world.resume();now+=100;lifecycle.step();now+=100;lifecycle.step();assert.ok(world.state.clock>480);
-  lifecycle.heartbeat(false);const paused=world.state.clock;now+=60000;lifecycle.step();assert.equal(world.state.clock,paused);assert.equal(world.state.status,'paused_manual');
-  lifecycle.heartbeat(true);now+=100;lifecycle.step();assert.equal(world.state.clock,paused);world.resume();now+=100;lifecycle.step();assert.ok(world.state.clock>paused);
-  now+=5000;lifecycle.step();assert.equal(world.state.status,'paused_manual');
+  assert.throws(()=>lifecycle.requireActive(),/连接/);
+  lifecycle.heartbeat(true);world.resume();now+=100;lifecycle.step();const started=world.state.clock;
+  // Main-thread timers can be delayed for a minute in a background tab.
+  now+=60000;lifecycle.heartbeat(true);lifecycle.step();
+  assert.equal(world.state.status,'running_live');assert.ok(world.state.clock>started);
+  assert.ok(world.state.clock-started<=1,'A delayed timer must not catch up a minute at once');
+  lifecycle.heartbeat(true,500);now+=501;lifecycle.step();
+  assert.equal(world.state.status,'paused_manual');const paused=world.state.clock;
+  lifecycle.heartbeat(true);lifecycle.step();assert.equal(world.state.clock,paused);
+  world.resume();now+=100;lifecycle.step();assert.ok(world.state.clock>paused);
+  // A heartbeat arriving first after OS sleep must not hide the long gap.
+  now+=120000;lifecycle.heartbeat(true);lifecycle.step();assert.equal(world.state.status,'paused_manual');
+  lifecycle.requireActive();world.resume();lifecycle.heartbeat(false);assert.equal(world.state.status,'paused_manual');
 });
 test('browser budgets retain unknown reservations on reload and costs across world restore',()=>{
   const {world,store}=fixture();store.setLimit('DeepSeek',1);const saved=store.archive(world.state,'before models');

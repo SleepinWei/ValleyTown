@@ -9,6 +9,7 @@ export class RuntimeClient {
   private listeners=new Set<()=>void>();private snapshots?:{player:Snapshot;observer:Snapshot};
   private startPromise?:Promise<void>;private worker?:Worker;private sequence=0;
   private hostSession=crypto.randomUUID();private leaseDeadline=0;private viewRevision=-1;private hostRevision=0;
+  private lastPublishAttempt=0;private pageOpen=true;
   private polling=false;private claiming=false;private stopping=false;
   private pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
   private heartbeat?:ReturnType<typeof setInterval>;private syncTimer?:ReturnType<typeof setInterval>;private releaseLock?:()=>void;
@@ -32,24 +33,29 @@ export class RuntimeClient {
       this.patch({email:session?.user.email??null,role:await isTownAdmin()?'admin':'viewer'});
       if(!cloud){await this.lock('guest');await this.boot('guest');this.patch({hosting:true,ready:true});}
       else {await this.poll();this.patch({ready:true});}
-      this.heartbeat=setInterval(()=>{
-        if(this.worker){
-          const valid=!cloud||performance.now()<this.leaseDeadline;
-          this.worker.postMessage({type:'heartbeat',visible:!document.hidden&&valid&&!this.stopping});
-          if(!valid&&!this.stopping)void this.stopHosting('管理连接已过期，已停止模拟。重新接管会载入共享存档。');
-        }
-      },1000);
+      this.heartbeat=setInterval(()=>this.pulse(),1000);
       document.addEventListener('visibilitychange',()=>{
-        if(document.hidden){this.worker?.postMessage({type:'heartbeat',visible:false});if(cloud&&this.info.hosting)void this.stopHosting();}
-        else if(cloud&&!this.info.hosting)void this.poll();
+        // Switching tabs does not sign out, release hosting, or pause the worker.
+        this.pulse();if(!document.hidden&&cloud&&!this.info.hosting)void this.poll();
       });
-      window.addEventListener('pagehide',()=>{this.worker?.postMessage({type:'heartbeat',visible:false});if(cloud&&this.info.hosting)void this.stopHosting();});
+      window.addEventListener('pagehide',()=>{
+        this.pageOpen=false;this.worker?.postMessage({type:'heartbeat',active:false});
+        if(cloud&&this.info.hosting)void this.stopHosting();
+      });
+      window.addEventListener('pageshow',()=>{this.pageOpen=true;this.pulse();});
       this.syncTimer=setInterval(()=>{
-        if(document.hidden)return;
         if(this.info.hosting&&cloud)void this.sync().catch(()=>{});
-        else if(cloud)void this.poll();
+        else if(cloud&&!document.hidden)void this.poll();
       },3000);
     }catch(e){this.patch({error:(e as Error).message,ready:false});throw e;}
+  }
+  private pulse(){
+    if(!this.worker)return;
+    const remaining=cloud?this.leaseDeadline-performance.now():90000;
+    const active=this.pageOpen&&remaining>0&&!this.stopping;
+    this.worker.postMessage({type:'heartbeat',active,validForMs:Math.max(0,remaining)});
+    if(remaining<=0&&!this.stopping)void this.stopHosting('模拟连接已中断，账号仍保持登录。重新进入管理即可载入共享存档。');
+    else if(active&&cloud&&this.info.hosting&&performance.now()-this.lastPublishAttempt>=3000)void this.sync().catch(()=>{});
   }
   private async poll(){
     if(this.polling||this.info.hosting)return;this.polling=true;
@@ -65,7 +71,7 @@ export class RuntimeClient {
     this.claiming=true;
     try{
       await this.lock('shared-town');const started=performance.now();
-      const remote=await claimTownHost(this.hostSession);this.leaseDeadline=started+15000;this.hostRevision=remote.revision;
+      const remote=await claimTownHost(this.hostSession);this.leaseDeadline=started+90000;this.hostRevision=remote.revision;
       // The shared checkpoint is authoritative. Old private/guest worlds are never auto-published.
       await this.boot('shared-town',remote.data,remote.revision,true);
       this.patch({hosting:true,online:true,error:'',conflict:false});await this.refreshModels();await this.sync();
@@ -78,6 +84,7 @@ export class RuntimeClient {
       const startup=setTimeout(()=>reject(new Error('浏览器世界启动超时')),30000);
       this.worker!.onerror=event=>{clearTimeout(startup);const error=new Error(event.message||'模拟线程停止');reject(error);void this.stopHosting(error.message);};
       this.worker!.onmessage=({data:m})=>{
+        if(m.type==='pulse')this.pulse();
         if(m.type==='ready'){clearTimeout(startup);resolve();}
         if(m.type==='snapshot'){this.snapshots=m.value;this.emit();}
         if(m.type==='error'){clearTimeout(startup);reject(new Error(m.error));void this.stopHosting(m.error);}
@@ -86,7 +93,7 @@ export class RuntimeClient {
         if(m.type==='model')void this.model(m);
       };
     });
-    this.worker.postMessage({type:'init',key,data,revision,shared,visible:!document.hidden});await ready;
+    this.worker.postMessage({type:'init',key,data,revision,shared,active:this.pageOpen,validForMs:cloud?Math.max(0,this.leaseDeadline-performance.now()):90000});await ready;
   }
   private stopWorker(){
     this.worker?.terminate();this.worker=undefined;
@@ -100,14 +107,14 @@ export class RuntimeClient {
     }catch{/* Last acknowledged checkpoint remains authoritative. */}
     finally{
       this.stopWorker();this.leaseDeadline=0;
-      if(cloud){try{await releaseTownHost(this.hostSession);}catch{/* A server-side lease expires after 20 seconds. */}}
+      if(cloud){try{await releaseTownHost(this.hostSession);}catch{/* A server-side lease expires after 120 seconds. */}}
       this.snapshots=undefined;this.viewRevision=-1;this.patch({hosting:false,online:false,error:message});this.stopping=false;
       if(cloud){await this.poll();if(message)this.patch({error:message});}
     }
   }
   private async model(m:{id:number;provider:string;body:unknown}){
     let dispatched=false;
-    try{if(!this.info.hosting||this.info.role!=='admin'||document.hidden||this.stopping||(cloud&&performance.now()>=this.leaseDeadline))throw new Error('管理员未连接，已停止新模型请求');
+    try{if(!this.info.hosting||this.info.role!=='admin'||!this.pageOpen||this.stopping||(cloud&&performance.now()>=this.leaseDeadline))throw new Error('管理员未连接，已停止新模型请求');
       dispatched=true;const response=await proxyModel(m.provider,m.body);this.worker?.postMessage({type:'model-result',id:m.id,...response});}
     catch(e){this.worker?.postMessage({type:'model-result',id:m.id,error:(e as Error).message,knownNotExecuted:!dispatched});}
   }
@@ -132,16 +139,16 @@ export class RuntimeClient {
     this.syncPromise=this.publish();try{await this.syncPromise;}finally{this.syncPromise=undefined;}
   }
   private async publish(){
-    this.patch({syncing:true});const started=performance.now();
+    this.patch({syncing:true});const started=performance.now();this.lastPublishAttempt=started;
     try{const dump=await this.rpc<{data:TownData;snapshot:Snapshot;generation:number}>('export');
       const revision=await publishTown(this.hostSession,this.hostRevision,dump.data,publicTownSnapshot(dump.snapshot));
-      this.hostRevision=revision;this.leaseDeadline=started+15000;
+      this.hostRevision=revision;this.leaseDeadline=started+90000;
       await this.rpc('synced',{revision,generation:dump.generation});this.patch({error:'',lastSaved:Date.now(),online:true});
-    }catch(e){this.worker?.postMessage({type:'heartbeat',visible:false});this.leaseDeadline=0;this.patch({error:'共享同步失败，模拟已暂停：'+(e as Error).message,online:false});throw e;}
+    }catch(e){this.worker?.postMessage({type:'heartbeat',active:false});this.leaseDeadline=0;this.patch({error:'共享同步失败，模拟已暂停：'+(e as Error).message,online:false});throw e;}
     finally{this.patch({syncing:false});}
   }
   async download(){this.requireHost();const dump=await this.rpc<{data:TownData}>('export');const url=URL.createObjectURL(new Blob([JSON.stringify(dump.data)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`valleytown-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-  async importFile(file:File){this.requireHost();if(file.size>10_000_000)throw new Error('存档文件不能超过 10 MB');const data=validateTownData(JSON.parse(await file.text()));await this.rpc('replace',{data,visible:!document.hidden});await this.sync();}
+  async importFile(file:File){this.requireHost();if(file.size>10_000_000)throw new Error('存档文件不能超过 10 MB');const data=validateTownData(JSON.parse(await file.text()));await this.rpc('replace',{data,active:this.pageOpen,validForMs:cloud?Math.max(0,this.leaseDeadline-performance.now()):90000});await this.sync();}
   async useCloud(){this.requireHost();await this.stopHosting();await this.takeControl();}
   async suspend(){await this.start();if(this.worker){await this.rpc('suspend');if(cloud)await this.stopHosting();}}
 }
