@@ -1,0 +1,23 @@
+name: 功能与体验建议
+description: 提出玩法、Agent 行为、界面或文档改进
+title: "[Idea] "
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 你想改善什么体验？
+      description: 描述实际场景，以及当前遇到的不便。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的行为
+      description: 可以用一个具体的玩家或居民故事来说明。
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 补充材料
+      description: 可选，附参考图片、类似产品或其他实现方式。

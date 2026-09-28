@@ -1,0 +1,43 @@
+name: 问题反馈
+description: 报告启动、界面、模拟或模型调用问题
+title: "[Bug] "
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 出现了什么问题？
+      description: 请描述预期行为与实际发生的情况。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 启动小镇……
+        2. 点击……
+        3. 观察到……
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 运行模式
+      options:
+        - 规则演示（demo）
+        - 真实模型（live）
+        - 尚未进入小镇 / 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      placeholder: 系统、Node.js 版本、浏览器版本、提交版本，以及新世界还是已有存档
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图与日志
+      description: 可粘贴相关日志或上传截图。请先移除 API 密钥、私人对话与个人信息，不要上传 .env 或完整数据目录。
