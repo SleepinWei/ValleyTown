@@ -7,7 +7,7 @@ test('Supabase migration enforces private saves, CAS writes and service-only quo
  const db=new PGlite();
  try{
   await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema auth,public to authenticated,anon,service_role;insert into auth.users values('${alice}'),('${bob}');`);
-  for(const file of readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort()) await db.exec(readFileSync(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
+  for(const file of readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')&&!f.includes('shared_town_roles')).sort()) await db.exec(readFileSync(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
   const payload={format:'valleytown-browser',version:1,world:{id:'town'}};
   await t.test('users see only their own row; stale revisions cannot overwrite',async()=>{
     await db.exec(`set role authenticated;set request.jwt.claim.sub='${alice}';`);

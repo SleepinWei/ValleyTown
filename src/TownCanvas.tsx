@@ -7,7 +7,7 @@ import { daylight, weatherInfo } from '../shared/weather';
 import { timeOf, type Snapshot } from '../shared/types';
 import { TownRenderer, type ViewState } from './three/TownRenderer';
 
-type Props={snapshot:Snapshot;selected:string;onSelect:(id:string)=>void;onMove:(x:number,y:number)=>void;onInteract:()=>void};
+type Props={readOnly?:boolean;snapshot:Snapshot;selected:string;onSelect:(id:string)=>void;onMove:(x:number,y:number)=>void;onInteract:()=>void};
 export function TownCanvas(props:Props){
   const host=useRef<HTMLDivElement>(null),engine=useRef<TownRenderer|null>(null),latest=useRef(props);latest.current=props;
   const [effects,setEffects]=useState(true),[error,setError]=useState('');
@@ -37,7 +37,7 @@ export function TownCanvas(props:Props){
       <button aria-label="放大地图" onClick={()=>engine.current?.control('in')}><Plus size={17}/></button><button aria-label="缩小地图" onClick={()=>engine.current?.control('out')}><Minus size={17}/></button>
       <button aria-label="电影与天气特效" aria-pressed={effects} className={effects?'active':''} title="切换电影调色、景深、柔光与云雨特效" onClick={()=>{engine.current?.setEffects(!effects);setEffects(!effects);}}><Sparkles size={17}/></button>
     </div>
-    <div className="map-mode-hint">{view.overview?`溪谷全域 · ${MAP_W} × ${MAP_H} · 点击区域展开探索`:'拖动浏览 · 滚轮缩放 · 旋转镜头 · 点击地面行走'}</div>
+    <div className="map-mode-hint">{view.overview?`溪谷全域 · ${MAP_W} × ${MAP_H} · 点击区域展开探索`:props.readOnly?'拖动浏览 · 滚轮缩放 · 旋转镜头 · 只读观看':'拖动浏览 · 滚轮缩放 · 旋转镜头 · 点击地面行走'}</div>
     {!view.overview&&<button className="mini-map" aria-label="小地图，点击返回全域" onClick={()=>engine.current?.control('overview')}><svg viewBox="0 0 240 180"><rect width="240" height="180" fill="#849a68"/><path d="M0 154 Q65 145 120 155 T240 154 V180 H0Z" fill="#538490"/><ellipse cx="36" cy="94" rx="26" ry="23" fill="#6a9b9b"/><rect x="133" y="36" width="5" height="118" fill="#6a9b9b"/><path d="M0 0H240V40L180 30 130 42 60 30 0 44Z" fill="#8e9984"/>{regions.map(r=><circle key={r.id} cx={r.center.x} cy={r.center.y} r="3" fill="#f5e3b9"/>)}<rect x={view.x} y={view.y} width={view.w} height={view.h} fill="none" stroke="#fff8d9" strokeWidth="2"/><circle cx={props.snapshot.player.x} cy={props.snapshot.player.y} r="4" fill="#fbe18e" stroke="#65523a"/></svg></button>}
     {error&&<div className="renderer-error" role="alert"><strong>图形显示</strong><p>{error}</p><button onClick={()=>window.location.reload()}>重新载入</button></div>}
   </div>;

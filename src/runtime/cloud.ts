@@ -5,18 +5,6 @@ const key=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY||import.meta.env.VITE_SU
 export const cloud=url&&key?createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
 export const cloudConfigured=!!cloud;
 export async function currentSession(){if(!cloud)return null;const {data,error}=await cloud.auth.getSession();if(error)throw error;return data.session;}
-export async function loadCloudTown(){
-  if(!cloud)throw new Error('未配置 Supabase');
-  const {data,error}=await cloud.from('town_saves').select('payload,revision,updated_at').maybeSingle();if(error)throw error;
-  return data?{data:validateTownData(data.payload),revision:Number(data.revision),updated:Date.parse(data.updated_at)}:null;
-}
-export async function saveCloudTown(data:TownData,revision:number){
-  if(!cloud)throw new Error('未配置 Supabase');
-  if(new TextEncoder().encode(JSON.stringify(data)).length>10_000_000)throw new Error('云存档超过 10 MB，请先导出备份；本地存档仍保留。');
-  const {data:next,error}=await cloud.rpc('save_town',{p_payload:data,p_expected_revision:revision});
-  if(error){if(error.message.includes('save_conflict'))throw new Error('云存档已被另一设备更新。已停止同步，请先导出本机备份，再载入云端版本。');throw error;}
-  return Number(next);
-}
 export async function modelStatus(){
   if(!cloud)return {jev:false,deepseek:false};
   const {data,error}=await cloud.functions.invoke('model-proxy',{body:{action:'status'}});if(error)throw new Error('模型代理未就绪：请检查 Edge Function、登录与云端模型权限');return data as {jev:boolean;deepseek:boolean;quota?:unknown};
@@ -29,3 +17,23 @@ export async function proxyModel(provider:string,body:unknown){
   return {status:response.status,body:await response.json()};
 }
 export type { Session };
+
+export async function isTownAdmin(){
+  if(!cloud)return true;
+  const {data,error}=await cloud.rpc('is_town_admin');if(error)throw error;return data===true;
+}
+export async function claimTownHost(session:string){
+  const {data,error}=await cloud!.rpc('claim_town_host',{p_session:session});if(error)throw error;
+  return {data:data.payload?validateTownData(data.payload):undefined,revision:Number(data.revision)};
+}
+export async function publishTown(session:string,revision:number,data:TownData,snapshot:import('../../shared/types').Snapshot){
+  const {data:next,error}=await cloud!.rpc('publish_town',{p_session:session,p_revision:revision,p_payload:data,p_snapshot:snapshot});
+  if(error)throw error;return Number(next);
+}
+export async function releaseTownHost(session:string){
+  const {error}=await cloud!.rpc('release_town_host',{p_session:session});if(error)throw error;
+}
+export async function watchTown(revision:number){
+  const {data,error}=await cloud!.rpc('watch_town',{p_revision:revision});if(error)throw error;
+  return data as {snapshot:import('../../shared/types').Snapshot|null;revision:number;online:boolean;updated_at:string};
+}

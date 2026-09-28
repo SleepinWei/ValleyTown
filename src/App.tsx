@@ -4,7 +4,7 @@ import { budgetProviders, money } from '../shared/budget';
 import { ActorStory } from './ActorStory';
 import { SimulationSpeed } from './SimulationSpeed';
 import { DecisionLab } from './DecisionLab';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Activity, ArrowDownToLine, ArrowRight, BookOpen, Check, ChevronDown, Clock3, Coins, Eye, Flower2, Heart, Leaf, MapPin, MessageCircle, Pause, Play, RefreshCw, Send, Settings2, Shield, Sparkles, Sun, Users, X, Backpack, Flag, CloudRain, FileText, LockKeyhole, CircleHelp, Save, Radio, Zap, Compass, BatteryMedium, Footprints, Moon, Cloud, CloudFog, CloudLightning, Maximize2, Minimize2 } from 'lucide-react';
 import type { Actor, DocumentView, PublicActor, Snapshot } from '../shared/types';
 import { dayOf, timeOf } from '../shared/types';
@@ -17,6 +17,7 @@ import { outdoorActivities } from '../shared/outdoors';
 
 import { api, runtime } from './runtime/client';
 import { CloudSettings } from './CloudSettings';
+import { ViewerApp } from './ViewerApp';
 
 const compact=(n:number)=>n>=1e6?`${(n/1e6).toFixed(2)}M`:n>=1000?`${(n/1000).toFixed(1)}k`:String(n);
 const running=(s:Snapshot)=>s.status==='running_live';
@@ -29,6 +30,11 @@ function Modal({title,children,close,wide=false}:{title:string;children:React.Re
 }
 
 export function App(){
+  const info=useSyncExternalStore(runtime.subscribe,()=>runtime.info);
+  useEffect(()=>{void runtime.start().catch(()=>{});},[]);
+  return info.hosting?<AdminApp/>:<ViewerApp/>;
+}
+function AdminApp(){
   const {root,button:fullscreenButton,immersive,toggle:toggleFullscreen}=useImmersive();
   const [world,setWorld]=useState<Snapshot|null>(null),[observer,setObserver]=useState(true),[selected,setSelected]=useState('gardener');
   const [connected,setConnected]=useState(false),[error,setError]=useState(''),[tab,setTab]=useState('profile');
@@ -68,7 +74,7 @@ export function App(){
     <header className="topbar">
       <a className="brand" href={import.meta.env.BASE_URL} aria-label="溪谷镇首页"><div className="brand-mark"><Leaf size={23}/></div><div><strong>溪谷镇<span>VALLEYTOWN</span></strong><small>每个人，都有自己的故事。</small></div></a>
       <nav className="view-switch" aria-label="模式"><button className={!observer?'active':''} onClick={()=>{setObserver(false);setModal(null);setTab('profile');}}><MapPin size={15}/> 自由游玩</button><button className={observer?'active':''} onClick={()=>setObserver(true)}><Eye size={15}/> 观察者</button></nav>
-      <div className="header-right"><span className={`connection ${connected?'online':''}`}><i/>{connected?'小镇在此页面运行':'正在载入'}</span><button className="icon-button" aria-label="帮助与操作说明" onClick={()=>setModal('help')}><CircleHelp size={19}/></button><button className="icon-button" aria-label="设置" onClick={()=>setModal('settings')}><Settings2 size={19}/></button></div>
+      <div className="header-right"><span className={`connection ${connected?'online':''}`}><i/>{connected?'管理员 · 正在发布共享小镇':'正在载入'}</span><button className="icon-button" aria-label="帮助与操作说明" onClick={()=>setModal('help')}><CircleHelp size={19}/></button><button className="icon-button" aria-label="设置" onClick={()=>setModal('settings')}><Settings2 size={19}/></button></div>
     </header>
     {world.laboratory?.active&&<div className="lab-running-banner" role="status">决策实验进行中 · {world.laboratory.completed} / {world.laboratory.total} · 世界时钟冻结 · 暂停模拟将停止后续请求</div>}
     <div className="world-toolbar">

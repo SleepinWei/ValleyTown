@@ -1,57 +1,52 @@
-# 静态前端 + Supabase 部署
+# 共享小镇 · 静态前端 + Supabase
 
-[返回首页](../README.md) · [文档导航](README.md)
+[返回首页](../README.md) · [文档导航](README.md) · [在线体验](https://sleepinwei.github.io/ValleyTown/)
 
-溪谷镇的日常运行不再需要 Node / Fastify 服务。React 与 Three.js 在主线程呈现世界，Web Worker 执行模拟；IndexedDB 保存本机数据，Supabase 提供账号、云存档和模型代理。`npm run build` 生成的 `dist/` 就是完整前端。
+线上只有一个世界，所有人看同一个小镇。管理员在浏览器里运行模拟，Supabase 保存共享状态；观众只渲染画面，不启动模拟、不请求模型。静态网页部署在 GitHub Pages，无需常驻 Node 服务。
 
-## 当前线上实例
+![所有人共同观看的小镇：居民列表、共享地图与只读账号入口](images/shared-viewer.png)
 
-- 前端：[sleepinwei.github.io/ValleyTown](https://sleepinwei.github.io/ValleyTown/)（GitHub Pages，`main` 自动发布）。
-- Supabase 项目：`jbdaxgonrvflwiwlxegt`，东京区域。
-- 已配置站点回跳地址、公开连接参数和模型代理允许域名。项目模型预算为 DeepSeek、Jev 各累计 ¥10，所有账号共享；新账号默认无模型权限。模型调用仍需要供应商 Secrets 与指定账号授权。
-- 初始数据库通过 SQL Editor 执行仓库中的初始化 SQL，已实测账号写入、旧版本冲突和跨账号隔离。初始 SQL 尚未登记迁移历史，后续项目预算迁移通过 MCP 应用。以后使用 CLI 管理时，先核对结构和远端迁移版本，再修复本地与远端历史，避免重复建表。
+## 账号和权限
 
-## 页面与模拟的生命周期
+| 身份 | 可以做什么 |
+| --- | --- |
+| 未登录访客 | 查看地图、居民近况与公开事件，调整自己的镜头 |
+| 普通账号 | 邮箱注册、验证与登录；同样只读观看 |
+| 管理员 | 点击「进入管理」，运行 / 暂停模拟，修改设置、编辑文档、导入导出与恢复存档 |
 
-- 打开页面，载入本机或账号存档，新旧世界都保持暂停；点击「开始生活 / 继续模拟」才推进。
-- 隐藏标签页、最小化、切换到其他标签页或关闭页面后暂停。返回可见页面仍需手动继续，避免突然恢复付费请求。
-- 浏览器休眠与离线时间不补算。同一浏览器中的同一个账号或访客存档由 Web Locks 保证只有一个页面持有。
-- 模型已经收到的请求无法因关页撤销；云端在发出请求前预留额度，未知结果保留额度，已返回的请求按实际用量结算。页面隐藏后不派发新请求。
-- 本机变更自动写入 IndexedDB；可见的已登录页面每 30 秒尝试云同步，也可手动「立即同步」。意外关闭可能丢失最近一次本机写入后尚未保存的瞬间，关页时云请求也不保证完成；跨设备前请点击立即同步。
+管理员由部署者在数据库指定邮箱，必须完成 Supabase 邮箱验证。浏览器无法修改名单；`user_metadata`、自选用户名、注册先后顺序都不会授予管理权限。数据库 RPC 每次发布与取得运行权限时重新校验角色。模型代理也会检查管理员身份、当前运行权限及额度。
 
-![浏览器存档设置：本机保存、备份导入导出与模拟模式](images/browser-settings.png)
+完整世界（角色秘密、编辑文档、模型记录、备份）与公开画面分表保存。普通账号不能下载完整世界，不能发布状态，也不能调用旧版私人存档写入接口。观众只拿到公开角色信息与公开事件，不包含角色私有记忆、秘密、决策追踪或私密对话。
 
-*实机截图：未配置 Supabase 的规则演示，云端账号功能在配置后显示。*
+## 谁在运行模拟
 
-## 1. 不配置云端，先试玩
+1. 管理员登录后先以观看模式进入，点击「进入管理」取得运行权限。
+2. 每次取得权限都从共享云存档载入，保持暂停；点击「开始生活 / 继续模拟」才推进。
+3. 管理页面每 3 秒发布画面并保存完整世界。观众每 3 秒检查更新，只在版本变化时下载新画面，通常有几秒延迟。
+4. 同一时刻只有一个管理员页面能运行。数据库用 20 秒租约与版本校验阻止其他标签页或设备同时覆盖世界。
+5. 隐藏或关闭管理员页面会暂停模拟，尽力保存并释放权限。突然断网 / 关机时，租约过期后显示管理员离线；观众仍能查看最后保存的画面。
+6. 返回后重新点击「进入管理」，以云端最后确认的存档为准。没有离线补算，也不会由普通观众代跑模拟。
 
-需要 Node.js 22.13+ 进行开发和构建；部署后的访问者只需要支持 WebGL、IndexedDB、Web Workers 和 Web Locks 的现代浏览器，以及 HTTPS（localhost 开发可使用 HTTP）。
+**管理员关闭页面后不会继续后台运行。** 若需要全天候运行，需要另行增加常驻模拟执行器。突然关闭可能丢失最近一次成功同步后的进度；在途模型请求可能继续计费，费用由独立云端账本保留。
+
+公开站点：[sleepinwei.github.io/ValleyTown](https://sleepinwei.github.io/ValleyTown/)；Supabase 项目 `jbdaxgonrvflwiwlxegt`，东京。`main` 推送后 GitHub Actions 自动测试、构建和发布。
+
+## 本地开发
+
+需要 Node.js 22.13+。访问者只需支持 WebGL、IndexedDB、Web Workers、Web Locks 的现代浏览器和 HTTPS。
 
 ```bash
 npm ci
 npm run dev
-```
-
-打开 Vite 输出的地址。无需 `.env` 或模型密钥，规则演示不会请求供应商。
-
-生产构建与本地预览：
-
-```bash
 npm run build
 npm start
 ```
 
-`npm start` 现在只预览静态网页，默认地址为 `http://127.0.0.1:4173`，不运行后台世界。
+不配置 Supabase 时为本机独立规则演示，使用 IndexedDB，不产生模型费用。配置 Supabase 后所有页面进入共享模式，不会自动上传旧访客或私人小镇。
 
-## 2. 创建 Supabase 项目并安装数据库
+## 数据库安装与迁移
 
-在 Supabase 新建项目，保留 Email 登录。设置 Authentication → URL Configuration 中的 Site URL 和 Redirect URLs 为前端站点地址；本地测试也添加相应 localhost 地址。默认开启邮件确认即可，用户确认邮件后回到网页用邮箱和密码登录。
-
-在 SQL Editor 中执行：
-
-按文件名顺序执行 [`supabase/migrations/`](../supabase/migrations/) 中的全部 SQL（初始化表结构，然后项目总预算）。已有数据库只应用尚未执行的迁移。
-
-也可使用 Supabase CLI：
+新项目在 SQL Editor 按文件名顺序执行 [`supabase/migrations/`](../supabase/migrations/) 中的所有 SQL。也可使用 CLI：
 
 ```bash
 supabase login
@@ -59,123 +54,107 @@ supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
 ```
 
-数据库包括：
+已有项目只应用尚未执行的迁移。当前线上实例的初始化 SQL 曾通过 SQL Editor 执行，尚未登记初始化版本；后续迁移通过 MCP 应用。首次改用 CLI 前，先核对结构并修复迁移历史，避免重复建表。
 
-| 表 / 函数 | 用途 |
+| 数据表 | 用途 |
 | --- | --- |
-| `town_saves` | 每个账号一份世界、历史、手动存档与编辑文档；RLS 限制为本人可读 |
-| `save_town` | 以版本号比较并保存，防止另一设备静默覆盖 |
-| `model_access` | 部署者授予的模型访问权限与人民币硬额度，浏览器不能修改 |
-| `model_budgets` | 所有账号共享的供应商累计预算；初始各 ¥10，删除账号也不会重置 |
-| `model_requests` | 云端请求预留与实际结算，独立于世界存档 |
-| `reserve_model_request` / `settle_model_request` / `fail_model_request` | 仅 service_role 可执行的原子预算操作 |
+| `town_admin_emails` | 管理员邮箱名单，仅部署者可修改 |
+| `shared_town` | 唯一共享世界的完整存档、版本与运行租约，仅管理员可读 |
+| `shared_town_view` | 面向观众的公开快照，任何人可读，浏览器不能直接写 |
+| `model_access` | 管理员账号累计调用额度 |
+| `model_budgets` | 所有账号共享的供应商累计预算 |
+| `model_requests` | 请求预留、结算与未知用量账本 |
+| `town_saves` | 旧版私人存档，仅保留用于迁移恢复 |
 
-不要关闭 RLS，也不要把 service_role 放进前端配置。
+写入通过受保护的 `claim_town_host` / `publish_town` / `release_town_host` RPC 完成。不要关闭 RLS，也不要把 service_role 密钥放进前端。
 
-## 3. 部署模型代理
+## 指定管理员
 
-模型密钥只设置在 Edge Function Secrets。创建本地未追踪的 `.env.supabase`，内容如下；把示例替换为你的值：
+部署者执行下面的 SQL，将示例替换为自己的邮箱。管理员需在网页「登录 / 注册」设置自己的密码并完成邮件验证，**无需向部署者发送密码**。
+
+```sql
+insert into public.town_admin_emails(email)
+values(lower('your-email@example.com')) on conflict do nothing;
+```
+
+管理员取得运行权限时，如果尚无 `model_access` 记录，自动配置两家各 ¥10 的账号上限；已有记录（包括禁用状态）保持不变。未验证邮箱、普通账号和访客都不会获得模型额度。
+
+在 Supabase Authentication → URL Configuration 设置 Site URL 与 Redirect URLs 为实际前端地址。保留 Email 登录和邮件确认。
+
+## 模型代理与费用限制
+
+供应商密钥只放入 Edge Function Secrets；不要提交到 GitHub。示例本地未追踪文件 `.env.supabase`：
 
 ```dotenv
 DEEPSEEK_API_KEY=your-deepseek-key
 VALLEYTOWN_JEV_API_KEY=your-jev-key
-ALLOWED_ORIGINS=https://your-town.example,http://localhost:5173,http://127.0.0.1:5173
+ALLOWED_ORIGINS=https://your-town.example
 JEV_USD_CNY=7
 ```
 
-`ALLOWED_ORIGINS` 填实际前端 Origin，逗号分隔，不包含路径或末尾 `/`。生产预览若使用 `4173`，也要添加对应 Origin。Supabase 自动提供 `SUPABASE_URL` 与 `SUPABASE_SERVICE_ROLE_KEY`。
+Origin 不带路径或末尾 `/`。然后：
 
 ```bash
 supabase secrets set --env-file .env.supabase
 supabase functions deploy model-proxy
 ```
 
-函数配置中的 `verify_jwt=false` 表示由函数通过 `auth.getUser(jwt)` 主动校验用户，兼容当前签名方式；**不是匿名开放代理**。每次调用都必须有有效用户 JWT、已启用的模型权限与剩余云端预算。供应商地址、模型名称、输出上限由服务器限定，客户端不能任意代理 URL 或模型。
+`verify_jwt=false` 表示函数通过 `auth.getUser(jwt)` 主动校验当前用户，**不是匿名代理**。函数固定供应商地址、模型名、输入大小和输出上限。每次真实调用还必须满足管理员身份、有效的运行租约和两层预算。
 
-项目预算与账号预算必须同时满足才能发出请求。数据库按供应商加锁预留，防止多个账号并发突破项目预算；两家各 ¥10，合计 ¥20，不自动重置。浏览器无权修改预算。
+- **项目累计预算：DeepSeek ¥10 + Jev ¥10，合计 ¥20。** 所有账号共享，不按天或按月重置，删除账号也不会退回项目用量。
+- 账号预算与项目预算同时校验；按供应商加锁预留，防止并发突破额度。
+- 单账号最多 20 个在途请求、每分钟 240 次。
+- 按 UTF-8 字节数与额外余量预留输入费用，预留最大输出费用；完成后按实际返回用量结算。
+- 未知结果保留预留。如果实际结算高于预留，自动停用对应供应商的新调用，等待部署者核对。
+- 页面设置里的预算是额外模拟限制，无法提高数据库项目额度。
 
-单用户最多 20 个在途请求、每分钟 240 次请求。云端 Jev 汇率来自 Secret，与界面中的本机估算汇率相互独立，调整时请保持一致。代理按 UTF-8 字节数加额外余量预留输入用量，并预留最大输出费用；成功后按返回用量结算。如果实际结算超过预留，自动停用该供应商的后续调用，等待部署者核对。
+这是 ValleyTown 代理的应用预算，**不是供应商账户的账单封顶**。供应商单价变化、内部计费差异和同一密钥在其他应用的用量不受这里控制。本次没有修改供应商控制台的账户级限制。
 
-**这是 ValleyTown 代理的应用预算，不是供应商账户的账单封顶。** 计价变化、供应商内部计费或同一密钥在其他应用的用量可能使实际账单不同；供应商改价时须更新代理。若供应商支持密钥预算或余额限制，还应在其控制台设置；本次部署未修改供应商控制台。
-
-## 4. 授予账号真实模型额度
-
-先在前端创建账号、确认邮件并登录。新账号默认只有云存档能力，**没有共享密钥的调用权限或赠送额度**。
-
-部署者在 SQL Editor 中执行下面的示例，为指定账号授予两家各 ¥10 的累计硬额度（`1 CNY = 1,000,000,000 nano-CNY`）：
-
-```sql
-insert into public.model_access(user_id, enabled, deepseek_limit_nano, jev_limit_nano)
-select id, true, 10000000000, 10000000000
-from auth.users where email = 'your-email@example.com'
-on conflict(user_id) do update set
-  enabled = excluded.enabled,
-  deepseek_limit_nano = excluded.deepseek_limit_nano,
-  jev_limit_nano = excluded.jev_limit_nano;
-```
-
-这设置的是账号累计额度上限，不会清空已用账本。账号额度提高后仍受项目总额度约束。查看项目剩余额度：
+查看额度：
 
 ```sql
 select provider, enabled, limit_nano / 1e9 as limit_cny,
   used_nano / 1e9 as used_and_reserved_cny,
-  greatest(limit_nano - used_nano, 0) / 1e9 as remaining_cny
+  greatest(limit_nano-used_nano,0) / 1e9 as remaining_cny
 from public.model_budgets;
 ```
 
-只有部署者可以调整 `model_budgets.limit_nano` 或关闭 `enabled`，不要清零 `used_nano`。若已经使用 ¥10，希望再追加 ¥5，请把相应上限改成 ¥15。关闭权限可将 `enabled` 改为 `false`。不确定用量的请求持续占用预留；确认供应商账单后由部署者处理，切勿为了恢复运行直接清空账本。
+只有部署者可以调整 `limit_nano` 或关闭 `enabled`。不要为了恢复运行清空账本或重置 `used_nano`。管理员在网页设置中检查模型连接，暂停后切换「真实 Agent」。
 
-回到网页「设置 → 检查模型连接」，看到两家已配置后，暂停模拟、切换「真实 Agent」并继续。页面内的预算是额外的本机上限，即使修改或删除本机数据，也不能提高云端硬额度。
+## 前端部署
 
-## 5. 配置并部署前端
-
-将 `.env.example` 复制成 `.env.local`，只填写公开配置：
+只给 Vite 配置公开连接参数：
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_public_key
 ```
 
-旧项目的 anon 公钥也可使用 `VITE_SUPABASE_ANON_KEY`。这些配置会写入静态文件，必须使用 publishable / anon 公钥，**不要填写 service_role 或供应商密钥**。
+`npm run build` 的产物为 `dist/`。GitHub Pages 通过仓库 Actions Variables 提供上述配置，子路径为 `VITE_BASE_PATH=/ValleyTown/`。Vercel 或 Netlify 同样使用构建命令 `npm run build` 与输出目录 `dist`。
 
-| 托管平台 | 构建命令 | 输出目录 | 额外设置 |
-| --- | --- | --- | --- |
-| Vercel | `npm run build` | `dist` | 选择 Vite，添加以上环境变量 |
-| Netlify | `npm run build` | `dist` | 添加以上环境变量 |
-| GitHub Pages | `npm run build` | `dist` | 仓库子路径需设置 `VITE_BASE_PATH=/ValleyTown/`；通过 Actions 上传 `dist` |
+改变环境变量需要重新构建；改变域名同时更新 Supabase Auth 回跳地址与模型代理 `ALLOWED_ORIGINS`。
 
-仓库已提供 [GitHub Pages 发布工作流](../.github/workflows/deploy-pages.yml)。在仓库 Settings → Pages 中选择 GitHub Actions，在 Settings → Secrets and variables → Actions → Variables 中设置 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_PUBLISHABLE_KEY`。推送 `main` 或手动运行工作流后，测试、构建与发布自动执行。工作流默认子路径为 `/ValleyTown/`。
+## 旧存档迁移
 
-本项目没有服务端页面路由。修改 Vite 环境变量后需要重新构建。最终域名确定后同步更新 Supabase 的认证 URL 和 `ALLOWED_ORIGINS`。
+不会自动把任意人的旧世界公开。管理员可以暂停模拟，在设置中导入自己确认要共享的 JSON 备份，导入后向所有观众发布公开画面。
 
-## 存档与多设备
-
-访客和每个账号使用不同的本机存档空间，登录不会把访客的私人内容自动上传。若想把访客小镇迁入账号：先导出备份，再登录、暂停并导入，然后同步云端。
-
-发现云端版本变化时，自动同步停止，模拟暂停。先「导出备份」保留本机进度，再展开「从云端重新载入」，按需使用云端版本；系统不自动合并两个不同进度的世界。换设备前请手动同步。
-
-清除浏览器数据会删除访客存档和未同步的账号数据。JSON 备份包含居民记忆、秘密和故事，请按私人存档保管。单份导入 / 云存档上限为 10 MB；长期运行的完整历史与大量手动存档可能达到上限，届时本地保存仍保留并提示同步失败。
-
-## 迁移旧 SQLite 存档
-
-先停止旧 Node 服务，保留完整 `data/` 备份，再运行只读导出：
+旧 SQLite 存档：先停止旧 Node 服务、备份 `data/`，再执行只读导出：
 
 ```bash
 npm run export:browser -- ./data ./output/valleytown-browser-save.json
 ```
 
-在网页「设置 → 导入备份」载入。迁移保留世界、事件、编辑文档、故事、实验记录及本地费用记录，旧数据库不改动。旧费用不会自动计入新 Supabase 项目的云端账本；部署者自行设置新项目额度。
+备份包含角色私有记忆、秘密、文档和本地费用记录，请妥善保管。恢复世界不会撤销云端已发生的模型费用。单份共享存档上限 10 MB。
 
-`server/` 中保留的 Node 适配器用于旧存档迁移、历史基准脚本与回归测试，**前端部署不运行它们**。旧服务只有显式执行 `npm run legacy:server` 才会启动。
+`server/` 保留用于旧数据迁移与回归测试的适配器；线上静态部署不运行它。
 
 ## 验证
 
 ```bash
 npm test
 npm run build
-npm run check:simulation
 ```
 
-本地测试涵盖页面生命周期、IndexedDB、模型代理鉴权 / 额度 / 异常、以及在 PostgreSQL 兼容运行时中执行实际 SQL 迁移并验证 RLS 与版本冲突。云端实际邮件、网络、供应商密钥和托管配置仍需部署后验证；使用规则演示可先完成不产生模型费用的验收。
+测试覆盖访客 / 普通账号 / 未验证管理员的权限、共享快照隐私、排他运行、版本冲突、租约失效、角色撤销和模型预算。线上真实邮件注册与真实模型请求仍需要用户自行完成账号验证与配置供应商 Secrets。
 
-参考：[Supabase 数据安全](https://supabase.com/docs/guides/database/secure-data)、[Edge Functions 认证](https://supabase.com/docs/guides/functions/auth)、[Supabase JavaScript](https://supabase.com/docs/reference/javascript/introduction)。
+数据库顾问会提示管理员名单 / 预算表没有客户端 RLS policy：这是有意拒绝所有客户端直读直写，仅由受保护函数访问。受保护的 SECURITY DEFINER RPC 具有固定 search_path 和明确身份检查。[RLS 检查说明](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) · [RPC 权限检查说明](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)。

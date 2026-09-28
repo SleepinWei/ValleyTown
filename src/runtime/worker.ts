@@ -44,7 +44,7 @@ worker.onmessage=async({data:m})=>{
     if(m.type==='init'){
       if(world)throw new Error('小镇已初始化');
       db=await openTownDatabase();key=m.key;
-      const local=await readLocal(db,key);
+      const local=m.shared?undefined:await readLocal(db,key);
       revision=m.revision??local?.revision??0;dirty=local?.dirty??false;
       initialize(validateTownData(m.data??local?.data??emptyTownData()));
       lifecycle.heartbeat(m.visible===true);await flush();snapshot();worker.postMessage({type:'ready'});return;
@@ -60,7 +60,7 @@ worker.onmessage=async({data:m})=>{
       if(m.method==='POST'&&!(m.path==='/control'&&m.body?.action==='pause'))lifecycle.requireVisible();
       result=await request(m.method,m.path,m.body);world.persist();await flush();snapshot();
     }else if(m.type==='export'){
-      world.persist();await flush();result={data:structuredClone(store.data),revision,generation};
+      world.persist();await flush();result={data:structuredClone(store.data),snapshot:world.snapshot(false),revision,generation};
     }else if(m.type==='synced'){
       revision=m.revision;if(generation===m.generation)dirty=false;await flush();result={ok:true};
     }else if(m.type==='suspend'){

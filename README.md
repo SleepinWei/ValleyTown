@@ -23,9 +23,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/town-overview.png" width="1200" alt="溪谷镇实机界面：居民列表、HD-2D 小镇、人物状态与生活动态" />
+  <img src="docs/images/shared-viewer.png" width="1200" alt="溪谷镇共享观看界面：所有人观看同一个 HD-2D 小镇，管理员控制模拟，观众只读" />
 </p>
-<p align="center"><sub>当前版本实机截图 · 规则演示模式（非模型） · 世界在本机运行</sub></p>
+<p align="center"><sub>共享观看实机截图 · 所有人看到同一个世界 · 管理员浏览器运行模拟</sub></p>
 
 ## 这里的居民，会记得与你相遇
 
@@ -96,9 +96,9 @@ VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_public_key
 ```
 
-Supabase 保存账号隔离的云存档，通过 Edge Functions 代理 Jev 与 DeepSeek。供应商密钥保留在云端 Secrets；访问权限与硬额度由部署者授予，浏览器不能提高云端额度。未配置 Supabase 也可以完整体验本机规则模拟。
+线上是所有人共同观看的一个小镇。Supabase 保存共享世界和账号权限；访客与普通账号只读观看，管理员登录后可运行模拟、修改设置和编辑世界。模拟在管理员浏览器中执行，隐藏或关闭管理页面后暂停。未配置 Supabase 时仍可体验本机规则演示。
 
-公开站点可直接体验规则模拟。真实模型调用需单独授权账号；项目默认设有 **DeepSeek ¥10 + Jev ¥10 的累计应用预算**，所有账号共享、用尽暂停，不自动重置。
+公开站点可直接观看，注册不会创建新世界。模型调用仅限当前运行小镇的管理员；密钥保存在 Edge Functions Secrets。项目默认设有 **DeepSeek ¥10 + Jev ¥10 的累计应用预算**，所有账号共享、用尽暂停，不自动重置。
 
 **[完整部署指南：数据库迁移、模型代理、额度与前端托管 →](docs/browser-deployment.md)**
 
@@ -145,7 +145,7 @@ flowchart LR
 | --- | --- |
 | 世界呈现 | React 19 + Three.js；HD-2D 场景、天气、角色与头顶对白。 |
 | 模拟与执行 | 浏览器 Web Worker；寻路、时间、库存、关系和模型任务独立于渲染线程运行。 |
-| 记忆与存档 | IndexedDB 保存本机状态，Supabase 按账号同步存档；文档在网页编辑，故事可导出 Markdown。 |
+| 记忆与存档 | 管理员使用 IndexedDB 缓存，Supabase 保存唯一共享世界；公开画面与完整存档分开，文档仅管理员可编辑。 |
 | 模型代理 | Supabase Edge Functions 验证身份、限制模型与额度，再调用供应商。 |
 | 上下文隔离 | 每位居民保有独立上下文；听闻是个人认知，秘密按条件解锁。 |
 | 可观察性 | 行动候选、实际选择、概率、调用耗时和费用账本可查；概率不等于正确率。 |
@@ -156,7 +156,7 @@ flowchart LR
 
 | 想了解什么 | 从这里开始 |
 | --- | --- |
-| 部署、账号、云存档与旧数据迁移 | [静态前端 + Supabase](docs/browser-deployment.md) |
+| 共享观看、管理员、部署与旧数据迁移 | [静态前端 + Supabase](docs/browser-deployment.md) |
 | 操作、存档、记忆编辑、暂停与重启 | [完整使用指南](docs/guide.md) |
 | 地图、户外活动、光影与天气 | [世界扩建](docs/world-expansion.md) · [天气与渲染](docs/weather-and-rendering.md) |
 | 故事、家庭与生活事件 | [人物故事](docs/character-stories.md) · [家庭与司法](docs/families-justice-workers.md) · [生活事件](docs/demo-incidents.md) |
@@ -177,7 +177,7 @@ npm run check:simulation # 临时规则世界运行三个游戏日，无模型�
 
 溪谷镇目前是持续迭代的浏览器模拟原型，聚焦可玩的 Agent 社交与观察体验。建筑提供门前交互，尚无独立室内地图、完整种植季节系统或战斗；长期社交平衡与持续真实模型运行仍需校准。
 
-每个账号有独立的云存档；「自由游玩」与「观察者」是在自己的世界里切换视角。模型模式会将筛选后的角色上下文发送到供应商。页面隐藏或关闭后停止推进；跨设备前请同步，清理浏览器数据前请导出备份。
+线上所有人观看同一个共享世界；管理员可在「自由游玩」与「观察者」间切换，普通账号和访客只读。模型模式会将筛选后的角色上下文发送到供应商。管理员隐藏或关闭页面后停止推进，观众保留最后同步画面；完整备份仅管理员可导出。
 
 仓库暂未指定开源许可证。
 

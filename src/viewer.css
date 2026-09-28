@@ -1,0 +1,19 @@
+.viewer-mode{display:flex;align-items:center;gap:8px;font-size:13px;color:#61765a}
+.viewer-shell .viewer-workspace{grid-template-columns:220px minmax(0,1fr) 270px}
+.viewer-avatar{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:36px;height:40px;border-radius:10px;color:#fff7e6;font-size:19px;border:2px solid #ffffff88}
+.viewer-avatar.large{width:70px;height:80px;font-size:34px;margin:12px auto 20px}
+.viewer-inspector{padding:24px;overflow:auto;text-align:center}
+.viewer-inspector h2{font-size:24px;margin:8px 0}
+.viewer-inspector p{font-size:13px;line-height:1.9}
+.viewer-about{margin-top:30px;padding-top:24px;border-top:1px solid #e0e5d5;color:#68785e}
+.viewer-about h3{font-size:14px}.viewer-about small{font-size:11px}
+.viewer-events{background:#fffdf5;border:1px solid #dce1d0;border-radius:12px;padding:20px;max-height:240px;overflow:auto}
+.viewer-events article{display:grid;grid-template-columns:130px 1fr;gap:14px;border-top:1px solid #edf0e4;padding:10px 0}
+.viewer-events time{font-size:11px;color:#899078}.viewer-events p{font-size:13px;margin:0;line-height:1.7}
+.viewer-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#61765a;padding:50px 24px;text-align:center}
+.viewer-empty h1{font-size:26px;margin:0}.viewer-empty p{font-size:14px}
+.viewer-notice{padding:12px 24px;background:#fff1d9;margin:0;font-size:13px;color:#78552a}
+.viewer-shell .header-right{gap:10px}.viewer-shell .header-right button{min-height:40px}
+.viewer-shell .panel-title h2{display:flex;gap:6px;align-items:center}
+@media(max-width:1100px){.viewer-shell .viewer-workspace{grid-template-columns:190px minmax(0,1fr)}.viewer-inspector{display:none}.viewer-mode{display:none}}
+@media(max-width:700px){.viewer-shell .viewer-workspace{display:flex;flex-direction:column}.viewer-shell .residents-panel{display:none}.viewer-shell .world-toolbar{flex-wrap:wrap;gap:12px}.viewer-shell .header-right button{font-size:11px;padding:8px}.viewer-events article{grid-template-columns:1fr;gap:5px}.viewer-shell .map-bottomline{font-size:10px}.viewer-shell .brand small{display:none}}
