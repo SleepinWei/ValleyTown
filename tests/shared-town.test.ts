@@ -48,6 +48,24 @@ test('shared town roles, exclusive hosting, checkpoint privacy and paid access a
  insert into auth.users(id,email,email_confirmed_at) values('${admin}','owner@example.com',now()),('${viewer}','viewer@example.com',now()),('${other}','other@example.com',null);`);
  for(const file of readdirSync(new URL('../supabase/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())await db.exec(readFileSync(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
  await db.exec(`insert into public.town_admin_emails values('owner@example.com'),('other@example.com');`);
+ await t.test('fast presentation scan matches recursive filtering for adversarial nested values',async()=>{
+  const cases=[
+   {rows:[{a_p_i_k_e_y:'hidden',ACCESS_TOKEN:'hidden',secret:{core:'game secret'}}]},
+   {rows:[{text:'line\nBearer private-token',error:'raw response'}]},
+   {rows:[{text:'line\nsk-fakecredentials123456 and sb_secret_private123456'}]},
+   {rows:[{text:'eyJfake.payload.signature',service_role:'hidden'}]},
+   {rows:[{text:'ordinary text',error:null},{error:'请求失败，诊断详情仅管理员可见'}]},
+   {rows:[{error:{raw:'sensitive nested error'}},{error:['raw error']},{error:false}]},
+   {rows:[{path:'"api_key": in harmless text',headers:{Authorization:'hidden'}}]},
+  ];
+  for(const candidate of cases){
+   const fast={displayVersion:2,...candidate};
+   const actual=(await db.query<{v:any}>('select public.redact_town_presentation($1) as v',[fast])).rows[0].v;
+   delete actual.displayVersion;
+   const expected=(await db.query<{v:any}>('select public.redact_town_presentation($1) as v',[candidate])).rows[0].v;
+   assert.deepEqual(actual,expected);
+  }
+ });
  await t.test('guests can watch but cannot read checkpoints or mutate roles',async()=>{
   await db.exec('set role anon;');assert.equal((await db.query<{admin:boolean}>('select public.is_town_admin() as admin')).rows[0].admin,false);
   assert.equal((await db.query('select public.watch_town() as view')).rows.length,1);

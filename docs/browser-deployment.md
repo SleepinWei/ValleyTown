@@ -168,3 +168,5 @@ npm run build
 已验证匿名用户不能发布、调用内部过滤函数或读取完整存档；普通账号不能接管模拟、发布世界或预留模型费用。展示资料在浏览器导出和数据库发布两处过滤凭据，保留虚构游戏秘密。
 
 Supabase 安全检查中的管理员名单与费用表「RLS 无策略」是预期的默认拒绝；管理 RPC 的 SECURITY DEFINER 是为受控读写而保留，每次在函数内验证已确认邮箱的管理员身份与当前租约，普通用户拒绝测试已通过。参见 [RLS 提示](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy)、[公开 RPC 提示](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)及[登录 RPC 提示](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)。账号服务仍提示未开启 [泄露密码检测](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)；本次没有调整账号策略或套餐。
+
+完整展示数据较大时，发布过滤采用聚合构建 JSON，并先完整扫描已脱敏的 v2 视图；只有检测到可疑键名、凭据标记或原始错误时才走递归重建。约 1.8 MB 的线上视图实测过滤约 0.68 秒，避免旧实现触发 RPC 查询超时；权限校验和模型预算保持不变。
