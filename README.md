@@ -98,6 +98,8 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_public_key
 
 Supabase 保存账号隔离的云存档，通过 Edge Functions 代理 Jev 与 DeepSeek。供应商密钥保留在云端 Secrets；访问权限与硬额度由部署者授予，浏览器不能提高云端额度。未配置 Supabase 也可以完整体验本机规则模拟。
 
+公开站点可直接体验规则模拟。真实模型调用需单独授权账号；项目默认设有 **DeepSeek ¥10 + Jev ¥10 的累计应用预算**，所有账号共享、用尽暂停，不自动重置。
+
 **[完整部署指南：数据库迁移、模型代理、额度与前端托管 →](docs/browser-deployment.md)**
 
 <details>

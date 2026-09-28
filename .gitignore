@@ -7,5 +7,6 @@ data/
 output/
 .firecrawl/
 .playwright-cli/
+supabase/.temp/
 *.log
 .DS_Store

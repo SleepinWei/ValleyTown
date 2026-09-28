@@ -8,8 +8,8 @@
 
 - 前端：[sleepinwei.github.io/ValleyTown](https://sleepinwei.github.io/ValleyTown/)（GitHub Pages，`main` 自动发布）。
 - Supabase 项目：`jbdaxgonrvflwiwlxegt`，东京区域。
-- 已配置站点回跳地址、公开连接参数和模型代理允许域名；模型调用仍需要供应商 Secrets 与账号额度。
-- 初始数据库通过 SQL Editor 执行仓库中的初始化 SQL，已实测账号写入、旧版本冲突和跨账号隔离。该实例尚未建立 Supabase CLI 迁移历史；以后使用 CLI 管理时，先核对结构并用迁移修复功能登记已执行的初始化，避免重复建表。
+- 已配置站点回跳地址、公开连接参数和模型代理允许域名。项目模型预算为 DeepSeek、Jev 各累计 ¥10，所有账号共享；新账号默认无模型权限。模型调用仍需要供应商 Secrets 与指定账号授权。
+- 初始数据库通过 SQL Editor 执行仓库中的初始化 SQL，已实测账号写入、旧版本冲突和跨账号隔离。初始 SQL 尚未登记迁移历史，后续项目预算迁移通过 MCP 应用。以后使用 CLI 管理时，先核对结构和远端迁移版本，再修复本地与远端历史，避免重复建表。
 
 ## 页面与模拟的生命周期
 
@@ -49,7 +49,7 @@ npm start
 
 在 SQL Editor 中执行：
 
-[`supabase/migrations/202609280001_browser_town.sql`](../supabase/migrations/202609280001_browser_town.sql)
+按文件名顺序执行 [`supabase/migrations/`](../supabase/migrations/) 中的全部 SQL（初始化表结构，然后项目总预算）。已有数据库只应用尚未执行的迁移。
 
 也可使用 Supabase CLI：
 
@@ -66,6 +66,7 @@ supabase db push
 | `town_saves` | 每个账号一份世界、历史、手动存档与编辑文档；RLS 限制为本人可读 |
 | `save_town` | 以版本号比较并保存，防止另一设备静默覆盖 |
 | `model_access` | 部署者授予的模型访问权限与人民币硬额度，浏览器不能修改 |
+| `model_budgets` | 所有账号共享的供应商累计预算；初始各 ¥10，删除账号也不会重置 |
 | `model_requests` | 云端请求预留与实际结算，独立于世界存档 |
 | `reserve_model_request` / `settle_model_request` / `fail_model_request` | 仅 service_role 可执行的原子预算操作 |
 
@@ -91,7 +92,11 @@ supabase functions deploy model-proxy
 
 函数配置中的 `verify_jwt=false` 表示由函数通过 `auth.getUser(jwt)` 主动校验用户，兼容当前签名方式；**不是匿名开放代理**。每次调用都必须有有效用户 JWT、已启用的模型权限与剩余云端预算。供应商地址、模型名称、输出上限由服务器限定，客户端不能任意代理 URL 或模型。
 
-单用户最多 20 个在途请求、每分钟 240 次请求。云端 Jev 汇率来自 Secret，与界面中的本机估算汇率相互独立，调整时请保持一致。代理采用当前项目记录的保守单价；供应商改价时需要更新代理并核对实际账单。
+项目预算与账号预算必须同时满足才能发出请求。数据库按供应商加锁预留，防止多个账号并发突破项目预算；两家各 ¥10，合计 ¥20，不自动重置。浏览器无权修改预算。
+
+单用户最多 20 个在途请求、每分钟 240 次请求。云端 Jev 汇率来自 Secret，与界面中的本机估算汇率相互独立，调整时请保持一致。代理按 UTF-8 字节数加额外余量预留输入用量，并预留最大输出费用；成功后按返回用量结算。如果实际结算超过预留，自动停用该供应商的后续调用，等待部署者核对。
+
+**这是 ValleyTown 代理的应用预算，不是供应商账户的账单封顶。** 计价变化、供应商内部计费或同一密钥在其他应用的用量可能使实际账单不同；供应商改价时须更新代理。若供应商支持密钥预算或余额限制，还应在其控制台设置；本次部署未修改供应商控制台。
 
 ## 4. 授予账号真实模型额度
 
@@ -109,7 +114,16 @@ on conflict(user_id) do update set
   jev_limit_nano = excluded.jev_limit_nano;
 ```
 
-这设置的是累计额度上限，不会清空已用账本。若已经使用 ¥10，希望再追加 ¥5，请把相应上限改成 ¥15。关闭权限可将 `enabled` 改为 `false`。不确定用量的请求持续占用预留；确认供应商账单后由部署者处理，切勿为了恢复运行直接清空账本。
+这设置的是账号累计额度上限，不会清空已用账本。账号额度提高后仍受项目总额度约束。查看项目剩余额度：
+
+```sql
+select provider, enabled, limit_nano / 1e9 as limit_cny,
+  used_nano / 1e9 as used_and_reserved_cny,
+  greatest(limit_nano - used_nano, 0) / 1e9 as remaining_cny
+from public.model_budgets;
+```
+
+只有部署者可以调整 `model_budgets.limit_nano` 或关闭 `enabled`，不要清零 `used_nano`。若已经使用 ¥10，希望再追加 ¥5，请把相应上限改成 ¥15。关闭权限可将 `enabled` 改为 `false`。不确定用量的请求持续占用预留；确认供应商账单后由部署者处理，切勿为了恢复运行直接清空账本。
 
 回到网页「设置 → 检查模型连接」，看到两家已配置后，暂停模拟、切换「真实 Agent」并继续。页面内的预算是额外的本机上限，即使修改或删除本机数据，也不能提高云端硬额度。
 

@@ -10,7 +10,9 @@ export interface ProxyDeps {
   fetch:typeof fetch;
   config:{origins:string[];deepseekKey?:string;jevKey?:string;usdCny:number};
 }
-const estimate=(body:unknown)=>{const text=JSON.stringify(body),wide=(text.match(/[^\x00-\x7f]/g)||[]).length;return Math.ceil((text.length-wide)/3+wide*1.5)+256;};
+// Reserve one token per UTF-8 byte plus framing headroom, rather than average
+// characters/token. Settlement releases unused funds; uncertain calls keep them.
+const estimate=(body:unknown)=>new TextEncoder().encode(JSON.stringify(body)).length+4096;
 const cost=(provider:Provider,input:number,output:number,cached:number,usdCny:number)=>Math.ceil(provider==='Jev'?input*.042*usdCny*1000:((input-cached)*2+cached*.04+output*8)*1000);
 function payload(provider:Provider,raw:any){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('invalid_payload');
