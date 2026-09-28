@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -9,7 +11,7 @@ import type { Question } from '../server/models';
 
 const flush=()=>new Promise<void>(r=>setImmediate(r));
 function setup(){
-  const dir=mkdtempSync('/private/tmp/valley-rate-'),store=new Store(dir),w=new World(store,'live');
+  const dir=mkdtempSync(tempPath(tmpdir(), 'valley-rate-')),store=new Store(dir),w=new World(store,'live');
   w.state.incidents.nextAt=1e12;for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}
   w.gateway.jev=async(_state,q:Record<string,Question>)=>({answers:Object.fromEntries(Object.entries(q).map(([id,spec])=>[id,spec.type==='choice'?{type:'choice',choice:'wait' in spec.criteria?'wait':Object.keys(spec.criteria)[0],confidence:1}:spec.type==='score'?{type:'score',score:1}:{type:'noul',noul:1}])),model:'stub',input:0,output:0,latency:1});
   w.gateway.text=async()=>({text:'测试计划',model:'stub',input:0,output:0,latency:1});

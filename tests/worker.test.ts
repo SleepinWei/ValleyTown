@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -5,7 +7,7 @@ import { SimulationWorker } from '../server/worker-client';
 import { createApp } from '../server/app';
 import { Store } from '../server/store';
 test('real worker owns simulation; gateway preserves auth, privacy, pause, saves and money pools across restart',async()=>{
- const dir=mkdtempSync('/private/tmp/valley-worker-test-');let worker=new SimulationWorker({dir,mode:'demo',limits:{DeepSeek:20,Jev:10}});let app:Awaited<ReturnType<typeof createApp>>|undefined;
+ const dir=mkdtempSync(tempPath(tmpdir(), 'valley-worker-test-'));let worker=new SimulationWorker({dir,mode:'demo',limits:{DeepSeek:20,Jev:10}});let app:Awaited<ReturnType<typeof createApp>>|undefined;
  try{
   await worker.ready;assert.ok(worker.snapshot().runtime!.threadId>0);assert.equal(worker.snapshot().actors.length,24);
   app=await createApp(worker);const denied=await app.inject({method:'POST',url:'/api/control',payload:{action:'resume'}});assert.equal(denied.statusCode,401);

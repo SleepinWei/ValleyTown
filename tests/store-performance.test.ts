@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -7,7 +9,7 @@ import { Store, BudgetError } from '../server/store';
 import { createWorld } from '../server/seed';
 
 test('cached usage tracks money reservations, settlement, failures and external SQLite writes',()=>{
- const dir=mkdtempSync('/private/tmp/valley-cache-'),store=new Store(dir,{DeepSeek:1,Jev:1});
+ const dir=mkdtempSync(tempPath(tmpdir(), 'valley-cache-')),store=new Store(dir,{DeepSeek:1,Jev:1});
  const other=new DatabaseSync(join(dir,'valleytown.sqlite'));
  try{
   assert.equal(store.usage().used,0);
@@ -27,7 +29,7 @@ test('cached usage tracks money reservations, settlement, failures and external 
 });
 
 test('incremental event persistence preserves archived events after the world window drops them',()=>{
- const dir=mkdtempSync('/private/tmp/valley-events-'),store=new Store(dir);
+ const dir=mkdtempSync(tempPath(tmpdir(), 'valley-events-')),store=new Store(dir);
  try{
   const world=createWorld('demo');
   const event={id:'persisted-event',at:world.clock,kind:'test',text:'An immutable event',actorIds:[],audience:['public'],mode:'live' as const};

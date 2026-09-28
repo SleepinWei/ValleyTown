@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,7 +12,7 @@ import type { Question } from '../server/models';
 
 const flush=()=>new Promise<void>(r=>setImmediate(r));
 function setup(){
- const dir=mkdtempSync('/private/tmp/valley-ds-efficient-'),store=new Store(dir),w=new World(store,'live');
+ const dir=mkdtempSync(tempPath(tmpdir(), 'valley-ds-efficient-')),store=new Store(dir),w=new World(store,'live');
  w.state.incidents.nextAt=1e12;for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}
  const calls:string[]=[];
  w.gateway.text=async(_s,_c,purpose)=>{calls.push(purpose);return {text:'优先本职活动，再休息；恶劣天气留在屋檐附近。',model:'test-ds',input:1,output:1,latency:1};};

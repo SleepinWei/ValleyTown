@@ -1,9 +1,11 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { Store } from '../server/store';
 import { World } from '../server/world';
 import { planning, planningPolicy } from '../server/planning';
-const dir=mkdtempSync('/private/tmp/valley-policy-three-days-'),store=new Store(dir),w=new World(store,'demo');
+const dir=mkdtempSync(tempPath(tmpdir(), 'valley-policy-three-days-')),store=new Store(dir),w=new World(store,'demo');
 const calls:{actor:string;day:number;kind:string}[]=[];
 const original=w.plan.bind(w);
 w.plan=async a=>{const p=planning(a,w.state.clock),before=p.callsToday,kind=p.request?.kind??'daily',day=p.day;await original(a);if(p.callsToday>before)calls.push({actor:a.id,day,kind});};

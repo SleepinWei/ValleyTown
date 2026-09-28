@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,7 +12,7 @@ import { ModelGateway, type Question, type JevResult } from '../server/models';
 import { createApp } from '../server/app';
 const flush=()=>new Promise<void>(resolve=>setImmediate(resolve));
 const result=(choice='rest',confidence=1):JevResult=>({answers:{action:{type:'choice',choice,confidence,probabilities:{[choice]:1}}},model:'test-jev',input:3,output:1,latency:5});
-function setup(){const dir=mkdtempSync('/private/tmp/valley-lab-'),store=new Store(dir),w=new World(store,'live');for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}w.state.weather='晴朗';w.gateway.jev=async()=>result();return {w,store,close(){store.close();rmSync(dir,{recursive:true,force:true});}};}
+function setup(){const dir=mkdtempSync(tempPath(tmpdir(), 'valley-lab-')),store=new Store(dir),w=new World(store,'live');for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}w.state.weather='晴朗';w.gateway.jev=async()=>result();return {w,store,close(){store.close();rmSync(dir,{recursive:true,force:true});}};}
 function configureLab(w:World){Object.defineProperty(w.lab.gateway,'configured',{value:{jev:true,deepseek:true}});w.lab.gateway.jev=async()=>result();w.lab.gateway.chooseText=async()=>({choice:'rest',text:'{"choice":"rest"}',model:'test-ds',input:1,output:1,latency:1});}
 
 test('action traces separate model choice, low confidence fallback and weather execution override',async()=>{

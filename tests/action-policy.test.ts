@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -8,7 +10,7 @@ import { planning, planIssue, requestPlan, replanEligibility, planningPolicy } f
 import { location } from '../shared/map';
 import { dayOf } from '../shared/types';
 const flush=()=>new Promise<void>(r=>setImmediate(r));
-function setup(){const dir=mkdtempSync('/private/tmp/valley-policy-'),store=new Store(dir),w=new World(store,'live');w.state.incidents.nextAt=1e12;for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}w.state.weather='晴朗';w.state.weatherSlot=Math.floor(w.state.clock/240);w.gateway.text=async()=>({text:'先完成工作，再照顾关系；恶劣天气留在屋檐附近。',input:1,output:1,latency:1,model:'test-ds'});w.gateway.jev=async()=>({answers:{action:{type:'choice',choice:'wait',confidence:1}},model:'test-jev',input:1,output:1,latency:1});w.resume();return {w,store,close(){store.close();rmSync(dir,{recursive:true,force:true});}};}
+function setup(){const dir=mkdtempSync(tempPath(tmpdir(), 'valley-policy-')),store=new Store(dir),w=new World(store,'live');w.state.incidents.nextAt=1e12;for(const a of w.state.actors){a.nextPlan=1e9;a.nextDecision=1e9;}w.state.weather='晴朗';w.state.weatherSlot=Math.floor(w.state.clock/240);w.gateway.text=async()=>({text:'先完成工作，再照顾关系；恶劣天气留在屋檐附近。',input:1,output:1,latency:1,model:'test-ds'});w.gateway.jev=async()=>({answers:{action:{type:'choice',choice:'wait',confidence:1}},model:'test-jev',input:1,output:1,latency:1});w.resume();return {w,store,close(){store.close();rmSync(dir,{recursive:true,force:true});}};}
 function enableReplan(w:World,id='baker'){const a=w.actor(id),p=planning(a,w.state.clock);p.dailyIssuedDay=dayOf(w.state.clock);p.plannedDay=p.day;p.nextReplanAt=0;p.nextReplanWallAt=0;planIssue(a,w.state.clock,'blocked','计划目标受阻');return a;}
 
 test('registry separates local activities from travel and filters gear, weather, identity and opening hours',()=>{

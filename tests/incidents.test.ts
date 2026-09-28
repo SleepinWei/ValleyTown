@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -9,7 +11,7 @@ import { freshIncidents } from '../shared/incidents';
 import { createApp } from '../server/app';
 
 function fixture() {
-  const dir = mkdtempSync('/private/tmp/valley-incidents-'), store = new Store(dir), w = new World(store, 'demo');
+  const dir = mkdtempSync(tempPath(tmpdir(), 'valley-incidents-')), store = new Store(dir), w = new World(store, 'demo');
   for (const a of w.state.actors) { a.nextDecision = a.nextPlan = 1e9; }
   return { w, store, close() { store.close(); rmSync(dir, { recursive: true, force: true }); } };
 }

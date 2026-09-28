@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join as tempPath } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -7,7 +9,7 @@ import { Store, BudgetError } from '../server/store';
 import { ModelGateway } from '../server/models';
 import { World } from '../server/world';
 import { createApp } from '../server/app';
-const setup=()=>{const dir=mkdtempSync('/private/tmp/valley-budget-');const store=new Store(dir,{DeepSeek:1,Jev:1});store.setExchange(7);return {dir,store,close(){this.store.close();rmSync(dir,{recursive:true,force:true});}};};
+const setup=()=>{const dir=mkdtempSync(tempPath(tmpdir(), 'valley-budget-'));const store=new Store(dir,{DeepSeek:1,Jev:1});store.setExchange(7);return {dir,store,close(){this.store.close();rmSync(dir,{recursive:true,force:true});}};};
 
 test('provider pools are independent and Jev output never consumes money',()=>{
  const f=setup();try{
@@ -43,7 +45,7 @@ test('unknown requests retain money and token reservations across restart and re
  }finally{f.close();}
 });
 test('old ledger migrates once without clearing completed usage or unknown reservations',()=>{
- const dir=mkdtempSync('/private/tmp/valley-old-budget-'),db=new DatabaseSync(join(dir,'valleytown.sqlite'));
+ const dir=mkdtempSync(tempPath(tmpdir(), 'valley-old-budget-')),db=new DatabaseSync(join(dir,'valleytown.sqlite'));
  db.exec(`CREATE TABLE calls(id TEXT PRIMARY KEY,provider TEXT NOT NULL,purpose TEXT NOT NULL,model TEXT NOT NULL,status TEXT NOT NULL,input INTEGER NOT NULL DEFAULT 0,output INTEGER NOT NULL DEFAULT 0,reserved INTEGER NOT NULL,latency INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL,error TEXT);
  CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
  INSERT INTO settings VALUES ('token_limit','5000000');
